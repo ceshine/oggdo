@@ -1,0 +1,17 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+*.csv
+
+.mypy_cache/
+.vscode/
+
+*.7z
+*.zip
+*.pth
+*.jl
+*.tfrecord
+
+notebooks/.ipynb_checkpoints/
