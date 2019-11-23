@@ -3,16 +3,20 @@ import argparse
 from functools import partial
 
 import numpy as np
+import pandas as pd
 from scipy.stats import spearmanr
 import torch
 from torch.utils.data import DataLoader
 from tqdm.autonotebook import tqdm
+from sklearn.metrics.pairwise import paired_cosine_distances
 
 from encoder.dataset import LcqmcDataset
 from encoder.dataloading import SortSampler, collate_pairs
 from encoder.components import BertWrapper, PoolingLayer
 from encoder.encoder import SentenceEncoder
 from encoder.models import SentencePairCosineSimilarity
+from encoder.evaluation import EmbeddingSimilarityEvaluator, SimilarityFunction
+
 
 logging.basicConfig(
     format='%(asctime)s - %(message)s',
@@ -20,27 +24,9 @@ logging.basicConfig(
     level=logging.INFO)
 
 
-def main(args):
-    embedder = BertWrapper(
-        args.model_path,
-        max_seq_length=256
-    )
-    pooler = PoolingLayer(
-        embedder.get_word_embedding_dimension(),
-        pooling_mode_mean_tokens=True,
-        pooling_mode_cls_token=False,
-        pooling_mode_max_tokens=False,
-        layer_to_use=args.layer
-    )
-    encoder = SentenceEncoder(modules=[
-        embedder, pooler
-    ])
-    model = SentencePairCosineSimilarity(
-        encoder, linear_transform=False
-    )
-    model.eval()
-
-    # print("\n".join([name for name, _ in model.named_parameters()]))
+def orig(args, model):
+    encoder = model.encoder
+    embedder = model.encoder[0]
 
     dataset = LcqmcDataset(embedder.tokenizer, filename=args.filename)
     loader = DataLoader(
@@ -78,22 +64,66 @@ def main(args):
     )
     print(f"Spearman: {spearman_score.correlation:.4f}")
 
-    print(f"Pred Min: {np.min(preds)}, {np.max(preds)}")
-    best_thres, best_acc = -1, -1
-    for threshold in np.arange(0.05, 1, 0.05):
-        binarized = (preds > threshold).astype("int")
+    return preds, references
+
+
+def raw(args, model):
+    df = pd.read_csv(
+        f"data/LCQMC/{args.filename}", delimiter="\t",
+        header=None, names=["text_1", "text_2", "label"]
+    )
+
+    tmp = model.encoder.encode(
+        df["text_1"].tolist() + df["text_2"].tolist(), batch_size=32,
+        show_progress_bar=True
+    )
+    embeddings1, embeddings2 = tmp[:df.shape[0]], tmp[df.shape[0]:]
+
+    evaluator = EmbeddingSimilarityEvaluator(
+        main_similarity=SimilarityFunction.COSINE
+    )
+
+    spearman_score = evaluator(
+        embeddings1, embeddings2, labels=df["label"].values
+    )
+    print(f"Spearman: {spearman_score:.4f}")
+
+    preds = 1 - paired_cosine_distances(embeddings1, embeddings2)
+    return preds, df["label"].values
+
+
+def main(args):
+    model = SentencePairCosineSimilarity.load(args.model_path)
+    model.eval()
+
+    if args.mode == "orig":
+        preds, references = orig(args, model)
+    else:
+        preds, references = raw(args, model)
+
+    print(f"Pred {pd.Series(preds).describe()}")
+
+    if args.threshold == -1:
+        best_thres, best_acc = -1, -1
+        for threshold in np.arange(0.05, 1, 0.05):
+            binarized = (preds > threshold).astype("int")
+            acc = (binarized == references).sum() / len(references)
+            if acc > best_acc:
+                best_acc = acc
+                best_thres = threshold
+        print(f"Best acc: {best_acc:.4f} @ {best_thres:.2f}")
+    else:
+        binarized = (preds > args.threshold).astype("int")
         acc = (binarized == references).sum() / len(references)
-        if acc > best_acc:
-            best_acc = acc
-            best_thres = threshold
-    print(f"Best acc: {best_acc:.4f} @ {best_thres:.2f}")
+        print(f"Acc: {acc:.4f} @ {args.threshold:.2f}")
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     arg = parser.add_argument
+    arg('--mode', type=str, default="orig")
     arg('--model-path', type=str, default="pretrained_models/bert_wwm_ext/")
-    arg('--filename', type=str, default="test.txt")
-    arg('--layer', type=int, default=-2)
+    arg('--filename', type=str, default="valid.txt")
+    arg('--threshold', type=float, default=-1)
     args = parser.parse_args()
     main(args)

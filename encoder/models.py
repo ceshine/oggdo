@@ -1,3 +1,6 @@
+from pathlib import Path
+from typing import Union
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -26,3 +29,30 @@ class SentencePairCosineSimilarity(nn.Module):
         if self.linear_transform:
             similarities = self.scaler * similarities + self.shift
         return similarities
+
+    def save(self, output_path: Union[Path, str]):
+        Path(output_path).mkdir(parents=True, exist_ok=True)
+        if self.linear_transform:
+            torch.save(
+                {
+                    "scaler": self.scaler.data,
+                    "shift": self.shift.data
+                },
+                Path(output_path) / "linear_transform.pth"
+            )
+        self.encoder.save(str(output_path))
+
+    @classmethod
+    def load(cls, output_path: Union[Path, str]):
+        linear_transform = False
+        if (Path(output_path) / "linear_transform.pth").exists():
+            linear_transform_params = torch.load(
+                Path(output_path) / "linear_transform.pth"
+            )
+            linear_transform = True
+        encoder = SentenceEncoder(str(output_path))
+        model = cls(encoder, linear_transform=linear_transform)
+        if linear_transform:
+            model.scaler.data = linear_transform_params["scaler"]
+            model.shift.data = linear_transform_params["shift"]
+        return model

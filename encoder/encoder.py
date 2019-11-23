@@ -7,7 +7,7 @@ from typing import List, Iterable
 import numpy as np
 import torch
 import torch.nn as nn
-from tqdm.autonotebook import tqdm, trange
+from tqdm.autonotebook import tqdm
 
 from .utils import import_from_string
 from . import __version__
@@ -131,8 +131,12 @@ class SentenceEncoder(nn.Sequential):
             model_path = os.path.join(path, str(idx)+"_"+type(module).__name__)
             os.makedirs(model_path, exist_ok=True)
             module.save(model_path)
-            contained_modules.append({'idx': idx, 'name': name, 'path': os.path.basename(
-                model_path), 'type': type(module).__module__})
+            contained_modules.append({
+                'idx': idx,
+                'name': name,
+                'path': os.path.basename(model_path),
+                'type': type(module).__module__ + "." + type(module).__name__
+            })
 
         with open(os.path.join(path, 'modules.json'), 'w') as fOut:
             json.dump(contained_modules, fOut, indent=2)

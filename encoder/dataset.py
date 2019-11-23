@@ -1,12 +1,21 @@
 from pathlib import Path
+from typing import Optional
 
+import joblib
 import numpy as np
 import pandas as pd
 from torch.utils.data import Dataset
 
 
 class LcqmcDataset(Dataset):
-    def __init__(self, tokenizer, data_dir: str = "data/LCQMC/", filename: str = "train.txt"):
+    def __init__(self, tokenizer, data_dir: str = "data/LCQMC/", filename: str = "train.txt", cache_dir: Optional[str] = None):
+        if cache_dir is not None:
+            cache_path = Path(cache_dir) / (filename + ".cache")
+            if cache_path.exists():
+                self.text_1, self.text_2, self.labels = joblib.load(
+                    cache_path
+                )
+                return
         df = pd.read_csv(
             Path(data_dir) / filename, delimiter="\t",
             header=None, names=["text_1", "text_2", "label"]
@@ -18,6 +27,11 @@ class LcqmcDataset(Dataset):
         self.text_2 = np.asarray([
             tokenizer.encode(text) for text in df.text_2.values
         ])
+        if cache_dir is not None:
+            joblib.dump(
+                [self.text_1, self.text_2, self.labels],
+                cache_path
+            )
 
     def __getitem__(self, item):
         return (
