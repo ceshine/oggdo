@@ -2,16 +2,13 @@
 This examples trains BERT for the STSbenchmark from scratch. It generates sentence embeddings
 that can be compared using cosine-similarity to measure the similarity.
 """
-import math
 import logging
 import argparse
-from datetime import datetime
 # from typing import Sequence
 
 import tqdm
 import pandas as pd
 from opencc import OpenCC
-from torch.utils.data import DataLoader
 
 from encoder.encoder import SentenceEncoder
 from encoder.components import BertWrapper, PoolingLayer
@@ -60,7 +57,7 @@ def main(args):
         pooling_mode_mean_tokens=True,
         pooling_mode_cls_token=False,
         pooling_mode_max_tokens=False,
-        layer_to_use=-2
+        layer_to_use=args.layer
     )
     model = SentenceEncoder(modules=[
         embedder, pooler
@@ -92,5 +89,6 @@ if __name__ == "__main__":
     arg = parser.add_argument
     arg('--model-path', type=str, default="pretrained_models/bert_wwm_ext/")
     arg('--t2s', action="store_true")
+    arg('--layer', type=int, default=-2)
     args = parser.parse_args()
     main(args)

@@ -41,7 +41,7 @@ class BertWrapper(nn.Module):
         """Returns token_embeddings, cls_token"""
         _, _, hidden_states = self.bert(
             input_ids=features['input_ids'],
-            token_type_ids=features['token_type_ids'],
+            token_type_ids=features.get('token_type_ids', None),
             attention_mask=features['input_mask']
         )
         features.update({
@@ -183,7 +183,7 @@ class PoolingLayer(nn.Module):
                 output_vectors.append(sum_embeddings / torch.sqrt(sum_mask))
 
         output_vector = torch.cat(output_vectors, 1)
-        features.update({'sentence_embedding': output_vector})
+        features.update({'sentence_embeddings': output_vector})
         return features
 
     def get_sentence_embedding_dimension(self):

@@ -91,7 +91,8 @@ class SentenceEncoder(nn.Sequential):
 
             with torch.no_grad():
                 embeddings = self.forward(features)
-                embeddings = embeddings['sentence_embedding'].to('cpu').numpy()
+                embeddings = embeddings['sentence_embeddings'].to(
+                    'cpu').numpy()
                 all_embeddings.extend(embeddings)
 
         reverting_order = np.argsort(length_sorted_idx)
