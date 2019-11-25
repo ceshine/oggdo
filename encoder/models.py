@@ -61,11 +61,13 @@ class SentencePairCosineSimilarity(nn.Module):
 
 class SentencePairNliClassification(nn.Module):
     def __init__(
-            self, sentence_encoder: SentenceEncoder,
-            n_classes: int = 3,
-            concatenation_sent_rep: bool = True,
-            concatenation_sent_difference: bool = True,
-            concatenation_sent_multiplication: bool = False):
+        self, sentence_encoder: SentenceEncoder,
+        n_classes: int = 3,
+        concatenation_sent_rep: bool = True,
+        concatenation_sent_difference: bool = True,
+        concatenation_sent_multiplication: bool = False,
+        **kwargs
+    ):
         super().__init__()
         self.encoder = sentence_encoder
         self.n_classes = n_classes
@@ -74,7 +76,7 @@ class SentencePairNliClassification(nn.Module):
         self.concatenation_sent_multiplication = concatenation_sent_multiplication
 
         self.config_keys = [
-            'sentence_embeddings_dim',  'concatenation_sent_rep',
+            'concatenation_sent_rep',
             'concatenation_sent_difference', 'concatenation_sent_multiplication',
             'n_classes']
 
