@@ -8,7 +8,12 @@ from torch.utils.data import Dataset
 
 
 class LcqmcDataset(Dataset):
-    def __init__(self, tokenizer, data_dir: str = "data/LCQMC/", filename: str = "train.txt", cache_dir: Optional[str] = None):
+    def __init__(
+            self,
+            tokenizer,
+            data_dir: str = "data/LCQMC/",
+            filename: str = "train.txt",
+            cache_dir: Optional[str] = None):
         if cache_dir is not None:
             cache_path = Path(cache_dir) / (filename + ".cache")
             if cache_path.exists():
@@ -26,6 +31,47 @@ class LcqmcDataset(Dataset):
         ])
         self.text_2 = np.asarray([
             tokenizer.encode(text) for text in df.text_2.values
+        ])
+        if cache_dir is not None:
+            joblib.dump(
+                [self.text_1, self.text_2, self.labels],
+                cache_path
+            )
+
+    def __getitem__(self, item):
+        return (
+            self.text_1[item],
+            self.text_2[item],
+            self.labels[item]
+        )
+
+    def __len__(self):
+        return len(self.labels)
+
+
+class XnliDataset(Dataset):
+    def __init__(
+            self,
+            tokenizer,
+            data_dir: str = "data/XNLI-1.0/",
+            filename: str = "train.csv",
+            cache_dir: Optional[str] = None):
+        if cache_dir is not None:
+            cache_path = Path(cache_dir) / (filename + ".xnli.cache")
+            if cache_path.exists():
+                self.text_1, self.text_2, self.labels = joblib.load(
+                    cache_path
+                )
+                return
+        df = pd.read_csv(Path(data_dir) / filename)
+        self.labels = np.zeros(df.label.shape[0], dtype=np.int64)
+        self.labels[df.label == "neutral"] = 1
+        self.labels[df.label == "entailment"] = 2
+        self.text_1 = np.asarray([
+            tokenizer.encode(text) for text in df.premise.values
+        ])
+        self.text_2 = np.asarray([
+            tokenizer.encode(text) for text in df.hypo.values
         ])
         if cache_dir is not None:
             joblib.dump(

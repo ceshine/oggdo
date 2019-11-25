@@ -62,7 +62,9 @@ class SortSampler(Sampler):
         ))
 
 
-def collate_pairs(batch, pad, opening_id, closing_id, truncate_length) -> Tuple[Dict, Optional[torch.Tensor]]:
+def collate_pairs(
+    batch, pad, opening_id, closing_id, truncate_length
+) -> Tuple[Dict, Optional[torch.Tensor]]:
     """Batch preparation.
 
     1. Pad the sequences.
@@ -91,7 +93,7 @@ def collate_pairs(batch, pad, opening_id, closing_id, truncate_length) -> Tuple[
     # Labels
     if transposed[2][0] is None:
         labels = None
-    labels = torch.tensor(transposed[2], dtype=torch.float)
+    labels = torch.tensor(transposed[2])
     return (
         {
             "input_ids": torch.cat(token_tensors, dim=0),

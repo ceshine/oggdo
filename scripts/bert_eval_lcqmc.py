@@ -1,6 +1,7 @@
 import logging
 import argparse
 from functools import partial
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -12,8 +13,6 @@ from sklearn.metrics.pairwise import paired_cosine_distances
 
 from encoder.dataset import LcqmcDataset
 from encoder.dataloading import SortSampler, collate_pairs
-from encoder.components import BertWrapper, PoolingLayer
-from encoder.encoder import SentenceEncoder
 from encoder.models import SentencePairCosineSimilarity
 from encoder.evaluation import EmbeddingSimilarityEvaluator, SimilarityFunction
 
@@ -89,13 +88,17 @@ def raw(args, model):
     print(f"Spearman: {spearman_score:.4f}")
 
     preds = 1 - paired_cosine_distances(embeddings1, embeddings2)
+
+    df["pred"] = preds
+    df.to_csv(f"cache/{Path(args.filename).stem}_pred.csv", index=False)
+
     return preds, df["label"].values
 
 
 def main(args):
     model = SentencePairCosineSimilarity.load(args.model_path)
     model.eval()
-
+    print(model.encoder[1].get_config_dict())
     if args.mode == "orig":
         preds, references = orig(args, model)
     else:

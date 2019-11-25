@@ -9,6 +9,7 @@ import argparse
 import tqdm
 import pandas as pd
 from opencc import OpenCC
+from sklearn.metrics.pairwise import paired_cosine_distances
 
 from encoder.encoder import SentenceEncoder
 from encoder.components import BertWrapper, PoolingLayer
@@ -82,6 +83,12 @@ def main(args):
         embeddings1, embeddings2, labels=df["similarity"].values
     )
     print(spearman_score)
+
+    preds = 1 - paired_cosine_distances(embeddings1, embeddings2)
+    df["pred"] = preds
+    df.to_csv("cache/annotated_zero_shot_pred.csv", index=False)
+    print(f"Pred {pd.Series(preds).describe()}")
+    return preds, df["similarity"].values
 
 
 if __name__ == "__main__":

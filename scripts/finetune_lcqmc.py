@@ -58,7 +58,7 @@ class CosineSimilarityBot(BaseBot):
 
 class ScalerDebugCallback(Callback):
     def on_step_ends(self, bot, train_loss, train_weight):
-        bot.model.scaler.data.clamp_(0.5, 1.)
+        bot.model.scaler.data.clamp_(0.5, 2.)
         bot.model.shift.data.clamp_(-0.5, 0.5)
 
     def on_eval_ends(self, bot: BaseBot, metrics: Dict[str, Tuple[float, str]]):

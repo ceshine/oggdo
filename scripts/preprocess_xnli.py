@@ -33,6 +33,6 @@ def process_test(filename="xnli.dev.jsonl", target="valid.csv", language="zh"):
 
 
 if __name__ == "__main__":
-    # process_train()
+    process_train()
     process_test("xnli.dev.jsonl", "valid.csv")
     process_test("xnli.test.jsonl", "test.csv")
