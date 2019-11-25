@@ -62,6 +62,42 @@ class SortSampler(Sampler):
         ))
 
 
+def collate_singles(
+    batch, pad, opening_id, closing_id, truncate_length
+) -> Tuple[Dict, Optional[torch.Tensor]]:
+    """Batch preparation.
+
+    1. Pad the sequences.
+    2. Or truncate the longer sequences.
+    """
+    transposed = list(zip(*batch))
+    max_len = min(
+        max((len(x) for x in transposed[0])) + 2,
+        truncate_length
+    )
+    tokens = np.zeros((len(batch), max_len), dtype=np.int64) + pad
+    tokens[:, 0] = opening_id
+    for j, row in enumerate(transposed[0]):
+        row = row[:max_len-2]
+        tokens[j, 1:len(row)+1] = row
+        tokens[j, len(row)+1] = closing_id
+    assert np.sum(tokens == closing_id) == len(batch)
+    token_tensor = torch.from_numpy(tokens)
+    mask_tensor = (token_tensor != pad).float()
+    # Labels
+    if transposed[1][0] is None:
+        labels = None
+    else:
+        labels = torch.tensor(transposed[1])
+    return (
+        {
+            "input_ids": token_tensor,
+            "input_mask": mask_tensor,
+        },
+        labels
+    )
+
+
 def collate_pairs(
     batch, pad, opening_id, closing_id, truncate_length
 ) -> Tuple[Dict, Optional[torch.Tensor]]:
@@ -93,7 +129,8 @@ def collate_pairs(
     # Labels
     if transposed[2][0] is None:
         labels = None
-    labels = torch.tensor(transposed[2])
+    else:
+        labels = torch.tensor(transposed[2])
     return (
         {
             "input_ids": torch.cat(token_tensors, dim=0),

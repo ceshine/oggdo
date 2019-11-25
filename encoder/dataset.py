@@ -88,3 +88,27 @@ class XnliDataset(Dataset):
 
     def __len__(self):
         return len(self.labels)
+
+
+class NewsClassificationDataset(Dataset):
+    def __init__(
+            self, tokenizer, df):
+        # drop headlines for now
+        df = df[df.label != "headlines"]
+        # politics
+        self.labels = np.zeros(df.label.shape[0], dtype=np.int64)
+        self.labels[df.label == "society"] = 1
+        self.labels[df.label == "international"] = 2
+        self.labels[df.label == "taiwan"] = 3
+        self.text = np.asarray([
+            tokenizer.encode(text) for text in df.text.values
+        ])
+
+    def __getitem__(self, item):
+        return (
+            self.text[item],
+            self.labels[item]
+        )
+
+    def __len__(self):
+        return len(self.labels)

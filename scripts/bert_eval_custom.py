@@ -5,7 +5,7 @@ import pandas as pd
 from opencc import OpenCC
 from sklearn.metrics.pairwise import paired_cosine_distances
 
-from encoder.models import SentencePairCosineSimilarity
+from encoder.encoder import SentenceEncoder
 from encoder.evaluation import EmbeddingSimilarityEvaluator, SimilarityFunction
 
 
@@ -21,14 +21,14 @@ def convert_t2s(text: str) -> str:
     return T2S.convert(text)
 
 
-def raw(args, model):
+def raw(args, encoder):
     df = pd.read_csv("data/annotated.csv")
 
     if args.t2s:
         df["text_1"] = df["text_1"].apply(convert_t2s)
         df["text_2"] = df["text_2"].apply(convert_t2s)
 
-    tmp = model.encoder.encode(
+    tmp = encoder.encode(
         df["text_1"].tolist() + df["text_2"].tolist(), batch_size=32,
         show_progress_bar=True
     )
@@ -50,11 +50,15 @@ def raw(args, model):
 
 
 def main(args):
-    model = SentencePairCosineSimilarity.load(args.model_path)
-    model.eval()
-    model.encoder[0].max_seq_length = 256
+    encoder = SentenceEncoder(model_path=args.model_path)
+    encoder.eval()
+    encoder.max_seq_length = 256
+    print(encoder[1].get_config_dict())
+    encoder[1].pooling_mode_cls_token = False
+    encoder[1].pooling_mode_mean_tokens = True
+    print(encoder[1].get_config_dict())
 
-    preds, _ = raw(args, model)
+    preds, _ = raw(args, encoder)
 
     print(f"Pred {pd.Series(preds).describe()}")
 

@@ -9,6 +9,18 @@ import torch.nn.functional as F
 from .encoder import SentenceEncoder
 
 
+def general_weight_initialization(module: nn.Module):
+    if isinstance(module, (nn.BatchNorm1d, nn.BatchNorm2d)):
+        if module.weight is not None:
+            nn.init.uniform_(module.weight)
+        if module.bias is not None:
+            nn.init.constant_(module.bias, 0)
+    elif isinstance(module, nn.Linear):
+        nn.init.kaiming_normal_(module.weight)
+        if module.bias is not None:
+            nn.init.constant_(module.bias, 0)
+
+
 class SentencePairCosineSimilarity(nn.Module):
     def __init__(self, sentence_encoder: SentenceEncoder, linear_transform: bool = False):
         super().__init__()
@@ -114,6 +126,61 @@ class SentencePairNliClassification(nn.Module):
             vectors_concat.append(embeddings_1 * embeddings_2)
         features = torch.cat(vectors_concat, 1)
         output = self.classifier(features)
+        return output
+
+    def get_config_dict(self):
+        return {key: self.__dict__[key] for key in self.config_keys}
+
+    def save(self, output_path: Union[str, Path]):
+        output_path = Path(output_path)
+        output_path.mkdir(parents=True, exist_ok=True)
+        with open(output_path / 'classifier_config.json', 'w') as fout:
+            json.dump(self.get_config_dict(), fout, indent=2)
+        torch.save(
+            self.classifier.state_dict(),
+            output_path / "classifier.pth"
+        )
+        self.encoder.save(str(output_path))
+
+    @classmethod
+    def load(cls, model_path: Union[Path, str]):
+        model_path = Path(model_path)
+        with open(model_path / 'classifier_config.json') as fin:
+            config = json.load(fin)
+        encoder = SentenceEncoder(str(model_path))
+        model = cls(encoder, **config)
+        model.classifier.load_state_dict(
+            torch.load(
+                Path(model_path) / "classifier.pth"
+            )
+        )
+        return model
+
+
+class SentenceClassification(nn.Module):
+    def __init__(self, sentence_encoder: SentenceEncoder, n_classes: int = 4, dropout: float = 0):
+        super().__init__()
+        self.n_classes = n_classes
+        self.dropout = dropout
+        self.encoder = sentence_encoder
+        self.sentence_embeddings_dim = (
+            self.encoder[1].get_sentence_embedding_dimension()
+        )
+        self.classifier = nn.Sequential(
+            nn.Dropout(self.dropout),
+            nn.Linear(
+                self.sentence_embeddings_dim,
+                n_classes
+            )
+        )
+        general_weight_initialization(self.classifier)
+        self.to(self.encoder.device)
+
+        self.config_keys = ["n_classes", "dropout"]
+
+    def forward(self, features):
+        embeddings = self.encoder(features)["sentence_embeddings"]
+        output = self.classifier(embeddings)
         return output
 
     def get_config_dict(self):
