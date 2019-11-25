@@ -1,0 +1,1 @@
+docker run --rm --gpus all -ti -v (pwd):/home/docker -e TFHUB_CACHE_DIR=/data/tf_hub_cache/ -v /data/tf_hub_cache:/data/tf_hub_cache tf131 bash -c "python -m scripts.use_eval_custom --t2s"

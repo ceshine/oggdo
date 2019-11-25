@@ -62,7 +62,6 @@ def main(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     arg = parser.add_argument
-    arg('--mode', type=str, default="orig")
     arg('--t2s', action="store_true")
     arg('--model-path', type=str, default="pretrained_models/bert_wwm_ext/")
     args = parser.parse_args()

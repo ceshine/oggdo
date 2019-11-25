@@ -2,11 +2,9 @@ import os
 import csv
 from enum import Enum
 
-import torch
 import logging
 import numpy as np
 from tqdm import tqdm
-from torch.utils.data import DataLoader
 from sklearn.metrics.pairwise import paired_cosine_distances, paired_euclidean_distances, paired_manhattan_distances
 from scipy.stats import pearsonr, spearmanr
 

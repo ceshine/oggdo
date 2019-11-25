@@ -17,7 +17,7 @@ from encoder.models import SentencePairCosineSimilarity
 logging.basicConfig(
     format='%(asctime)s - %(message)s',
     datefmt='%Y-%m-%d %H:%M:%S',
-    level=logging.INFO)
+    level=logging.WARN)
 
 
 def main(args):
@@ -79,14 +79,19 @@ def main(args):
     print(f"Spearman: {spearman_score.correlation:.4f}")
 
     print(f"Pred Min: {np.min(preds)}, {np.max(preds)}")
-    best_thres, best_acc = -1, -1
-    for threshold in np.arange(0.05, 1, 0.05):
-        binarized = (preds > threshold).astype("int")
+    if args.threshold == -1:
+        best_thres, best_acc = -1, -1
+        for threshold in np.arange(0.05, 1, 0.05):
+            binarized = (preds > threshold).astype("int")
+            acc = (binarized == references).sum() / len(references)
+            if acc > best_acc:
+                best_acc = acc
+                best_thres = threshold
+        print(f"Best acc: {best_acc:.4f} @ {best_thres:.2f}")
+    else:
+        binarized = (preds > args.threshold).astype("int")
         acc = (binarized == references).sum() / len(references)
-        if acc > best_acc:
-            best_acc = acc
-            best_thres = threshold
-    print(f"Best acc: {best_acc:.4f} @ {best_thres:.2f}")
+        print(f"Acc: {acc:.4f} @ {args.threshold:.2f}")
 
 
 if __name__ == "__main__":
@@ -95,5 +100,6 @@ if __name__ == "__main__":
     arg('--model-path', type=str, default="pretrained_models/bert_wwm_ext/")
     arg('--filename', type=str, default="test.txt")
     arg('--layer', type=int, default=-2)
+    arg('--threshold', type=float, default=-1)
     args = parser.parse_args()
     main(args)

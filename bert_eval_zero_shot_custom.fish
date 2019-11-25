@@ -1,0 +1,1 @@
+python -m scripts.bert_zero_shot_eval_custom --layer -1
