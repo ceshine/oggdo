@@ -112,3 +112,26 @@ class NewsClassificationDataset(Dataset):
 
     def __len__(self):
         return len(self.labels)
+
+
+class NewsSimilarityDataset(Dataset):
+    def __init__(
+            self, tokenizer, df):
+        # politics
+        self.labels = df.similarity.values
+        self.text_1 = np.asarray([
+            tokenizer.encode(text) for text in df.text_1.values
+        ])
+        self.text_2 = np.asarray([
+            tokenizer.encode(text) for text in df.text_2.values
+        ])
+
+    def __getitem__(self, item):
+        return (
+            self.text_1[item],
+            self.text_2[item],
+            self.labels[item]
+        )
+
+    def __len__(self):
+        return len(self.labels)

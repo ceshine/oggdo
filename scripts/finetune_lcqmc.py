@@ -3,7 +3,7 @@ import argparse
 from pathlib import Path
 from functools import partial
 from dataclasses import dataclass
-from typing import Tuple, Dict
+from typing import Tuple, Dict, Sequence
 
 import numpy as np
 import torch
@@ -40,16 +40,16 @@ NO_DECAY = [
 @dataclass
 class CosineSimilarityBot(BaseBot):
     log_dir: Path = MODEL_DIR / "logs/"
+    metrics: Sequence = (
+        BinaryAccuracy(
+            threshold=(0.05, 1.0, 0.05)
+        ),
+        AUC()
+    )
 
     def __post_init__(self):
         super().__post_init__()
         self.loss_format = "%.4f"
-        self.metrics = (
-            BinaryAccuracy(
-                threshold=(0.05, 1.0, 0.05)
-            ),
-            AUC()
-        )
 
     @staticmethod
     def extract_prediction(output):
@@ -59,7 +59,7 @@ class CosineSimilarityBot(BaseBot):
 class ScalerDebugCallback(Callback):
     def on_step_ends(self, bot, train_loss, train_weight):
         bot.model.scaler.data.clamp_(0.5, 2.)
-        bot.model.shift.data.clamp_(-0.5, 0.5)
+        bot.model.shift.data.clamp_(-1., 1.)
 
     def on_eval_ends(self, bot: BaseBot, metrics: Dict[str, Tuple[float, str]]):
         bot.logger.info(
