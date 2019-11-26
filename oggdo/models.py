@@ -2,6 +2,7 @@ import json
 from pathlib import Path
 from typing import Union
 
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -39,8 +40,13 @@ class SentencePairCosineSimilarity(nn.Module):
         embeddings_1 = embeddings[:len(embeddings) // 2]
         embeddings_2 = embeddings[len(embeddings) // 2:]
         similarities = F.cosine_similarity(embeddings_1, embeddings_2)
+        return self.calibrate_similarity(similarities)
+
+    def calibrate_similarity(self, similarities: Union[torch.Tensor, np.ndarray]):
+        if isinstance(similarities, np.ndarray):
+            similarities = torch.tensor(similarities)
         if self.linear_transform:
-            similarities = self.scaler * similarities + self.shift
+            return self.scaler * (similarities + self.shift)
         return similarities
 
     def save(self, output_path: Union[Path, str]):
