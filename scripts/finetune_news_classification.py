@@ -23,11 +23,11 @@ from helperbot import (
 from helperbot.metrics import Top1Accuracy
 from helperbot.callbacks import Callback
 
-from encoder.dataset import NewsClassificationDataset
-from encoder.dataloading import SortSampler, SortishSampler, collate_singles
-from encoder.components import BertWrapper, PoolingLayer
-from encoder.encoder import SentenceEncoder
-from encoder.models import SentenceClassification
+from oggdo.dataset import NewsClassificationDataset
+from oggdo.dataloading import SortSampler, SortishSampler, collate_singles
+from oggdo.components import BertWrapper, PoolingLayer
+from oggdo.encoder import SentenceEncoder
+from oggdo.models import SentenceClassification
 from scripts.bert_eval_custom import convert_t2s
 
 CACHE_DIR = Path('./cache/')

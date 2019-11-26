@@ -5,8 +5,8 @@ import pandas as pd
 from opencc import OpenCC
 from sklearn.metrics.pairwise import paired_cosine_distances
 
-from encoder.encoder import SentenceEncoder
-from encoder.evaluation import EmbeddingSimilarityEvaluator, SimilarityFunction
+from oggdo.encoder import SentenceEncoder
+from oggdo.evaluation import EmbeddingSimilarityEvaluator, SimilarityFunction
 
 
 logging.basicConfig(

@@ -20,11 +20,11 @@ from helperbot import (
 from helperbot.metrics import BinaryAccuracy, AUC
 from helperbot.callbacks import Callback
 
-from encoder.dataset import LcqmcDataset
-from encoder.dataloading import SortSampler, SortishSampler, collate_pairs
-from encoder.components import BertWrapper, PoolingLayer
-from encoder.encoder import SentenceEncoder
-from encoder.models import SentencePairCosineSimilarity
+from oggdo.dataset import LcqmcDataset
+from oggdo.dataloading import SortSampler, SortishSampler, collate_pairs
+from oggdo.components import BertWrapper, PoolingLayer
+from oggdo.encoder import SentenceEncoder
+from oggdo.models import SentencePairCosineSimilarity
 
 CACHE_DIR = Path('./cache/')
 CACHE_DIR.mkdir(exist_ok=True, parents=True)

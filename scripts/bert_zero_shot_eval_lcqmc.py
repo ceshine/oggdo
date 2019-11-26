@@ -8,11 +8,11 @@ import torch
 from torch.utils.data import DataLoader
 from tqdm.autonotebook import tqdm
 
-from encoder.dataset import LcqmcDataset
-from encoder.dataloading import SortSampler, collate_pairs
-from encoder.components import BertWrapper, PoolingLayer
-from encoder.encoder import SentenceEncoder
-from encoder.models import SentencePairCosineSimilarity
+from oggdo.dataset import LcqmcDataset
+from oggdo.dataloading import SortSampler, collate_pairs
+from oggdo.components import BertWrapper, PoolingLayer
+from oggdo.encoder import SentenceEncoder
+from oggdo.models import SentencePairCosineSimilarity
 
 logging.basicConfig(
     format='%(asctime)s - %(message)s',

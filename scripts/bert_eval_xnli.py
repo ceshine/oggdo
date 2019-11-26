@@ -10,9 +10,9 @@ import torch
 from torch.utils.data import DataLoader
 from tqdm.autonotebook import tqdm
 
-from encoder.dataset import XnliDataset
-from encoder.dataloading import SortSampler, collate_pairs
-from encoder.models import SentencePairNliClassification
+from oggdo.dataset import XnliDataset
+from oggdo.dataloading import SortSampler, collate_pairs
+from oggdo.models import SentencePairNliClassification
 
 
 logging.basicConfig(

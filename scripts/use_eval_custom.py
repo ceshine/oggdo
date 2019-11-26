@@ -8,7 +8,7 @@ import tensorflow as tf
 import tensorflow_hub as hub
 import tf_sentencepiece  # Not used directly but needed to import TF ops.
 
-from encoder.evaluation import EmbeddingSimilarityEvaluator, SimilarityFunction
+from oggdo.evaluation import EmbeddingSimilarityEvaluator, SimilarityFunction
 
 
 T2S = OpenCC('t2s')

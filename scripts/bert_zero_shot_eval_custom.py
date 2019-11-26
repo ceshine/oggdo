@@ -11,9 +11,9 @@ import pandas as pd
 from opencc import OpenCC
 from sklearn.metrics.pairwise import paired_cosine_distances
 
-from encoder.encoder import SentenceEncoder
-from encoder.components import BertWrapper, PoolingLayer
-from encoder.evaluation import EmbeddingSimilarityEvaluator, SimilarityFunction
+from oggdo.encoder import SentenceEncoder
+from oggdo.components import BertWrapper, PoolingLayer
+from oggdo.evaluation import EmbeddingSimilarityEvaluator, SimilarityFunction
 
 
 class LoggingHandler(logging.Handler):
