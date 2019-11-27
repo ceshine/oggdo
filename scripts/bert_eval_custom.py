@@ -22,7 +22,7 @@ def convert_t2s(text: str) -> str:
 
 
 def raw(args, encoder):
-    df = pd.read_csv("data/annotated.csv")
+    df = pd.read_csv(args.file)
 
     if args.t2s:
         df["text_1"] = df["text_1"].apply(convert_t2s)
@@ -66,6 +66,7 @@ def main(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     arg = parser.add_argument
+    arg('--file', type=str, default="data/annotated.csv")
     arg('--t2s', action="store_true")
     arg('--model-path', type=str, default="pretrained_models/bert_wwm_ext/")
     args = parser.parse_args()

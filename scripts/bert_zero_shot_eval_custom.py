@@ -48,7 +48,7 @@ def convert_t2s(text: str) -> str:
 
 def main(args):
     # Read the dataset
-    df = pd.read_csv("data/annotated.csv")
+    df = pd.read_csv(args.file)
     embedder = BertWrapper(
         args.model_path,
         max_seq_length=256
@@ -95,6 +95,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     arg = parser.add_argument
     arg('--model-path', type=str, default="pretrained_models/bert_wwm_ext/")
+    arg('--file', type=str, default="data/annotated.csv")
     arg('--t2s', action="store_true")
     arg('--layer', type=int, default=-2)
     args = parser.parse_args()

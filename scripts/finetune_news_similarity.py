@@ -7,6 +7,7 @@ from typing import Tuple, Dict
 
 import numpy as np
 import pandas as pd
+import joblib
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
@@ -169,11 +170,12 @@ def load_model(model_path: str, linear_transform):
     return model
 
 
-def get_splitted_data(args):
+def get_splitted_data(args) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    cache_file = CACHE_DIR / "annotated_splitted.jl"
+    if cache_file.exists():
+        print("[Warning] Using cached splitted data...")
+        return joblib.load(cache_file)
     df = pd.read_csv(DATA_PATH)
-    if args.t2s:
-        df["text_1"] = df["text_1"].apply(convert_t2s)
-        df["text_2"] = df["text_2"].apply(convert_t2s)
     sss = ShuffleSplit(n_splits=1, test_size=0.3, random_state=412)
     train_idx, rest_idx = next(sss.split(df))
     df_train = df.iloc[train_idx]
@@ -182,11 +184,22 @@ def get_splitted_data(args):
     valid_idx, test_idx = next(sss.split(df_rest))
     df_valid = df_rest.iloc[valid_idx]
     df_test = df_rest.iloc[test_idx]
+    joblib.dump([df_train, df_valid, df_test], cache_file)
+    df_valid.to_csv(CACHE_DIR / "annotated_valid.csv", index=False)
+    df_test.to_csv(CACHE_DIR / "annotated_test.csv", index=False)
     return df_train, df_valid, df_test
 
 
 def get_loaders(embedder, args) -> Tuple[DataLoader, DataLoader]:
     df_train, df_valid, df_test = get_splitted_data(args)
+    if args.t2s:
+        for df in (df_train, df_valid, df_test):
+            df["text_1"] = df["text_1"].apply(convert_t2s)
+            df["text_2"] = df["text_2"].apply(convert_t2s)
+    print(df_valid.text_1.head(2))
+    print(df_test.text_1.head(2))
+    if args.sample_train > 0 and args.sample_train < 1:
+        df_train = df_train.sample(frac=args.sample_train)
     ds_train = NewsSimilarityDataset(
         embedder.tokenizer, df_train)
     train_loader = DataLoader(
@@ -250,6 +263,7 @@ def main():
     arg = parser.add_argument
     arg('mode', type=str)
     arg('model_path', type=str)
+    arg('--sample-train', type=float, default=-1)
     arg('--batch-size', type=int, default=16)
     arg('--grad-accu', type=int, default=2)
     arg('--lr', type=float, default=3e-5)
