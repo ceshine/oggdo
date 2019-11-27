@@ -97,7 +97,7 @@ def finetune(args, model, train_loader, valid_loader, criterion) -> CosineSimila
     callbacks = [
         MovingAverageStatsTrackerCallback(
             avg_window=len(train_loader) // 10,
-            log_interval=len(train_loader) // 7
+            log_interval=len(train_loader) // 8
         ),
         LearningRateSchedulerCallback(
             MultiStageScheduler(
@@ -174,11 +174,11 @@ def get_splitted_data(args):
     if args.t2s:
         df["text_1"] = df["text_1"].apply(convert_t2s)
         df["text_2"] = df["text_2"].apply(convert_t2s)
-    sss = ShuffleSplit(n_splits=1, test_size=0.3, random_state=42)
+    sss = ShuffleSplit(n_splits=1, test_size=0.3, random_state=412)
     train_idx, rest_idx = next(sss.split(df))
     df_train = df.iloc[train_idx]
     df_rest = df.iloc[rest_idx]
-    sss = ShuffleSplit(n_splits=1, test_size=0.5, random_state=42)
+    sss = ShuffleSplit(n_splits=1, test_size=0.5, random_state=412)
     valid_idx, test_idx = next(sss.split(df_rest))
     df_valid = df_rest.iloc[valid_idx]
     df_test = df_rest.iloc[test_idx]
@@ -311,6 +311,10 @@ def main():
             preds_val, y_val
         )
         print(f"Spearman: {spearman_score.correlation:.4f}")
+        spearman_score = spearmanr(
+            np.sort(y_val), np.arange(len(preds_val))
+        )
+        print(f"Max Spearman: {spearman_score.correlation:.4f}")
         print("=" * 20)
         print("Test")
         print("=" * 20)
@@ -321,6 +325,10 @@ def main():
             preds_test, y_test
         )
         print(f"Spearman: {spearman_score.correlation:.4f}")
+        spearman_score = spearmanr(
+            np.sort(y_test), np.arange(len(preds_test))
+        )
+        print(f"Max Spearman: {spearman_score.correlation:.4f}")
     else:
         raise ValueError("Unrecognized mode!")
 

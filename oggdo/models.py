@@ -1,3 +1,4 @@
+from __future__ import annotations
 import json
 from pathlib import Path
 from typing import Union
@@ -34,7 +35,7 @@ class SentencePairCosineSimilarity(nn.Module):
         self.encoder = sentence_encoder
         self.to(self.encoder.device)
 
-    def forward(self, features):
+    def forward(self, features) -> torch.Tensor:
         embeddings = self.encoder(features)["sentence_embeddings"]
         assert len(embeddings) % 2 == 0
         embeddings_1 = embeddings[:len(embeddings) // 2]
@@ -42,14 +43,15 @@ class SentencePairCosineSimilarity(nn.Module):
         similarities = F.cosine_similarity(embeddings_1, embeddings_2)
         return self.calibrate_similarity(similarities)
 
-    def calibrate_similarity(self, similarities: Union[torch.Tensor, np.ndarray]):
+    def calibrate_similarity(self, similarities: Union[torch.Tensor, np.ndarray]) -> torch.Tensor:
         if isinstance(similarities, np.ndarray):
             similarities = torch.tensor(similarities)
+        similarities = similarities.to(self.encoder.device)
         if self.linear_transform:
             return self.scaler * (similarities + self.shift)
         return similarities
 
-    def save(self, output_path: Union[Path, str]):
+    def save(self, output_path: Union[Path, str]) -> None:
         Path(output_path).mkdir(parents=True, exist_ok=True)
         if self.linear_transform:
             torch.save(
@@ -62,7 +64,7 @@ class SentencePairCosineSimilarity(nn.Module):
         self.encoder.save(str(output_path))
 
     @classmethod
-    def load(cls, output_path: Union[Path, str]):
+    def load(cls, output_path: Union[Path, str]) -> SentencePairCosineSimilarity:
         linear_transform = False
         if (Path(output_path) / "linear_transform.pth").exists():
             linear_transform_params = torch.load(

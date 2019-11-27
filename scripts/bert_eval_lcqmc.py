@@ -11,10 +11,10 @@ from torch.utils.data import DataLoader
 from tqdm.autonotebook import tqdm
 from sklearn.metrics.pairwise import paired_cosine_distances
 
-from encoder.dataset import LcqmcDataset
-from encoder.dataloading import SortSampler, collate_pairs
-from encoder.models import SentencePairCosineSimilarity
-from encoder.evaluation import EmbeddingSimilarityEvaluator, SimilarityFunction
+from oggdo.dataset import LcqmcDataset
+from oggdo.dataloading import SortSampler, collate_pairs
+from oggdo.models import SentencePairCosineSimilarity
+from oggdo.evaluation import EmbeddingSimilarityEvaluator, SimilarityFunction
 
 
 logging.basicConfig(

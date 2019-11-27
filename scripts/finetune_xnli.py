@@ -64,6 +64,10 @@ def get_optimizer(model, lr):
             'params': [p for n, p in model.encoder.named_parameters()
                        if any(nd in n for nd in NO_DECAY)],
             'weight_decay': 0
+        },
+        {
+            'params': model.classifier.parameters(),
+            'weight_decay': 0.1
         }
     ]
     return AdamW(params, lr=lr)
@@ -132,7 +136,8 @@ def finetune(args, model, train_loader, valid_loader, criterion):
 def load_model(model_path,):
     embedder = BertWrapper(
         model_path,
-        max_seq_length=256
+        max_seq_length=256,
+        do_lower_case=False
     )
     pooler = PoolingLayer(
         embedder.get_word_embedding_dimension(),
