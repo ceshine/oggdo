@@ -32,10 +32,12 @@ def batch_to_device(batch, target_device: device):
     :param target_device:
     :return: the batch sent to the device
     """
-    features = batch['features']
-    for paired_sentence_idx in range(len(features)):
-        for feature_name in features[paired_sentence_idx]:
-            features[paired_sentence_idx][feature_name] = features[
-                paired_sentence_idx][feature_name].to(target_device)
+    features = features_to_device(batch['features'], target_device)
     labels = batch['labels'].to(target_device)
     return features, labels
+
+
+def features_to_device(features, target_device: device):
+    for feature_name in features:
+        features[feature_name] = features[feature_name].to(target_device)
+    return features

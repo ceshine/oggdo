@@ -3,13 +3,17 @@ import logging
 import os
 from collections import OrderedDict, defaultdict
 from typing import List, Iterable
+from functools import partial
 
 import numpy as np
 import torch
 import torch.nn as nn
+from torch.utils.data import DataLoader
 from tqdm.autonotebook import tqdm
 
-from .utils import import_from_string
+from .utils import import_from_string, features_to_device
+from .dataset import SentenceDataset
+from .dataloading import collate_singles, SortSampler
 from . import __version__
 
 
@@ -58,47 +62,41 @@ class SentenceEncoder(nn.Sequential):
                 logging.getLogger().getEffectiveLevel() == logging.DEBUG
             )
 
-        all_embeddings = []
-        length_sorted_idx = np.argsort([len(sen) for sen in sentences])
+        ds = SentenceDataset(self[0].tokenizer, sentences)
+        sampler = SortSampler(
+            ds,
+            key=lambda x: len(ds.text[x])
+        )
+        loader = DataLoader(
+            ds,
+            sampler=sampler,
+            collate_fn=partial(
+                collate_singles,
+                pad=0,
+                opening_id=self[0].cls_token_id,
+                closing_id=self[0].sep_token_id,
+                truncate_length=self[0].max_seq_length
+            ),
+            batch_size=batch_size,
+            num_workers=1
+        )
 
-        iterator = range(0, len(sentences), batch_size)
+        all_embeddings = []
+
+        iterator = loader
         if show_progress_bar:
             iterator = tqdm(iterator, desc="Batches")
 
-        for batch_idx in iterator:
-            batch_tokens = []
-            batch_start = batch_idx
-            longest_seq = 0
-
-            for idx in length_sorted_idx[batch_start:batch_start+batch_size]:
-                sentence = sentences[idx]
-                tokens = self.tokenize(sentence)
-                longest_seq = max(longest_seq, len(tokens))
-                batch_tokens.append(tokens)
-
-            features = defaultdict(list)
-            for text in batch_tokens:
-                sentence_features = self.get_sentence_features(
-                    text, longest_seq)
-                for feature_name in sentence_features:
-                    features[feature_name].append(
-                        sentence_features[feature_name])
-
-            for feature_name in features:
-                features[feature_name] = torch.tensor(
-                    np.asarray(features[feature_name])
-                ).to(self.device)
-
+        for features, _ in iterator:
             with torch.no_grad():
-                embeddings = self.forward(features)
+                embeddings = self.forward(
+                    features_to_device(features, self.device))
                 embeddings = embeddings['sentence_embeddings'].to(
                     'cpu').numpy()
                 all_embeddings.extend(embeddings)
 
-        reverting_order = np.argsort(length_sorted_idx)
-        all_embeddings = np.asarray(
-            [all_embeddings[idx] for idx in reverting_order]
-        )
+        reverting_order = np.argsort(list(iter(sampler)))
+        all_embeddings = np.asarray(all_embeddings)[reverting_order]
 
         return all_embeddings
 

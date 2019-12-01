@@ -67,9 +67,16 @@ def get_optimizer(model, lr):
     if model.linear_transform:
         params.append(
             {
-                'params': [model.scaler, model.shift],
+                'params': model.scaler,
                 'weight_decay': 0,
-                'lr': 3e-2
+                'lr': 1e-1
+            }
+        )
+        params.append(
+            {
+                'params': model.shift,
+                'weight_decay': 0,
+                'lr': 1e-2
             }
         )
     return AdamW(params, lr=lr)
@@ -165,8 +172,8 @@ def load_model(model_path: str, linear_transform):
         encoder, linear_transform=linear_transform
     )
     if linear_transform:
-        model.scaler.data = torch.tensor([1.]).to(model.encoder.device)
-        model.shift.data = torch.tensor([-0.1]).to(model.encoder.device)
+        model.scaler.data = torch.tensor([0.6]).to(model.encoder.device)
+        model.shift.data = torch.tensor([0.3]).to(model.encoder.device)
     return model
 
 

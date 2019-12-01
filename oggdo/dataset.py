@@ -135,3 +135,16 @@ class NewsSimilarityDataset(Dataset):
 
     def __len__(self):
         return len(self.labels)
+
+
+class SentenceDataset(Dataset):
+    def __init__(self, tokenizer, sentences):
+        self.text = np.asarray([
+            tokenizer.encode(text) for text in sentences
+        ])
+
+    def __getitem__(self, item):
+        return self.text[item]
+
+    def __len__(self):
+        return len(self.text)

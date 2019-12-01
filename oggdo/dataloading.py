@@ -70,7 +70,13 @@ def collate_singles(
     1. Pad the sequences.
     2. Or truncate the longer sequences.
     """
-    transposed = list(zip(*batch))
+    if isinstance(batch[0], list):
+        transposed = [
+            batch,
+            [None] * len(batch)
+        ]
+    else:
+        transposed = list(zip(*batch))
     max_len = min(
         max((len(x) for x in transposed[0])) + 2,
         truncate_length

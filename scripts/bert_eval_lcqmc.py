@@ -20,7 +20,7 @@ from oggdo.evaluation import EmbeddingSimilarityEvaluator, SimilarityFunction
 logging.basicConfig(
     format='%(asctime)s - %(message)s',
     datefmt='%Y-%m-%d %H:%M:%S',
-    level=logging.INFO)
+    level=logging.ERROR)
 
 
 def orig(args, model):
