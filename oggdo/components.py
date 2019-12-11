@@ -60,7 +60,7 @@ class BertWrapper(nn.Module):
         # return self.tokenizer.convert_tokens_to_ids(
         #     self.tokenizer.tokenize(text)
         # )
-        return self.tokenizer.encode(text)
+        return self.tokenizer.encode(text, add_special_tokens=False)
 
     def get_sentence_features(self, tokens: List[str], pad_seq_length: int) -> Dict:
         """

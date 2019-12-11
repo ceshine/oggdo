@@ -27,10 +27,12 @@ class LcqmcDataset(Dataset):
         )
         self.labels = df.label.values
         self.text_1 = np.asarray([
-            tokenizer.encode(text) for text in df.text_1.values
+            tokenizer.encode(text, add_special_tokens=False)
+            for text in df.text_1.values
         ])
         self.text_2 = np.asarray([
-            tokenizer.encode(text) for text in df.text_2.values
+            tokenizer.encode(text, add_special_tokens=False)
+            for text in df.text_2.values
         ])
         if cache_dir is not None:
             joblib.dump(
@@ -68,10 +70,12 @@ class XnliDataset(Dataset):
         self.labels[df.label == "neutral"] = 1
         self.labels[df.label == "entailment"] = 2
         self.text_1 = np.asarray([
-            tokenizer.encode(text) for text in df.premise.values
+            tokenizer.encode(text, add_special_tokens=False)
+            for text in df.premise.values
         ])
         self.text_2 = np.asarray([
-            tokenizer.encode(text) for text in df.hypo.values
+            tokenizer.encode(text, add_special_tokens=False)
+            for text in df.hypo.values
         ])
         if cache_dir is not None:
             joblib.dump(
@@ -101,7 +105,8 @@ class NewsClassificationDataset(Dataset):
         self.labels[df.label == "international"] = 2
         self.labels[df.label == "taiwan"] = 3
         self.text = np.asarray([
-            tokenizer.encode(text) for text in df.text.values
+            tokenizer.encode(text, add_special_tokens=False)
+            for text in df.text.values
         ])
 
     def __getitem__(self, item):
@@ -120,10 +125,12 @@ class NewsSimilarityDataset(Dataset):
         # politics
         self.labels = df.similarity.values
         self.text_1 = np.asarray([
-            tokenizer.encode(text) for text in df.text_1.values
+            tokenizer.encode(text, add_special_tokens=False)
+            for text in df.text_1.values
         ])
         self.text_2 = np.asarray([
-            tokenizer.encode(text) for text in df.text_2.values
+            tokenizer.encode(text, add_special_tokens=False)
+            for text in df.text_2.values
         ])
 
     def __getitem__(self, item):
@@ -140,7 +147,8 @@ class NewsSimilarityDataset(Dataset):
 class SentenceDataset(Dataset):
     def __init__(self, tokenizer, sentences):
         self.text = np.asarray([
-            tokenizer.encode(text) for text in sentences
+            tokenizer.encode(text, add_special_tokens=False)
+            for text in sentences
         ])
 
     def __getitem__(self, item):

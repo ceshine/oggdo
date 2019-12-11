@@ -87,7 +87,10 @@ def collate_singles(
         row = row[:max_len-2]
         tokens[j, 1:len(row)+1] = row
         tokens[j, len(row)+1] = closing_id
-    assert np.sum(tokens == closing_id) == len(batch)
+
+    assert (
+        np.sum(tokens == closing_id) == len(batch)), \
+        f"{np.sum(tokens == closing_id)}, {len(batch)}"
     token_tensor = torch.from_numpy(tokens)
     mask_tensor = (token_tensor != pad).float()
     # Labels
