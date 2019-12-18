@@ -147,8 +147,8 @@ def finetune(args, model, train_loader, valid_loader, criterion) -> CosineSimila
 
 
 def load_model(model_path: str, linear_transform):
-    model_path = Path(model_path)
-    if (model_path / "modules.json").exists():
+    model_path_ = Path(model_path)
+    if (model_path_ / "modules.json").exists():
         encoder = SentenceEncoder(str(model_path))
         encoder[1].pooling_mode_mean_tokens = True
         encoder[1].pooling_mode_cls_token = False
