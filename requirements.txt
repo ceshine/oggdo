@@ -1,1 +1,9 @@
 opencc-python-reimplemented
+scipy
+pandas
+scikit-learn
+joblib
+transformers==2.3.0
+tqdm
+typer
+https://github.com/ceshine/pytorch-helper-bot/archive/master.zip
