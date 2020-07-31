@@ -91,7 +91,7 @@ class SentenceEncoder(nn.Sequential):
             with torch.no_grad():
                 embeddings = self.forward(
                     features_to_device(features, self.device))
-                embeddings = embeddings['sentence_embeddings'].to(
+                embeddings = embeddings['sentence_embeddings'].float().to(
                     'cpu').numpy()
                 all_embeddings.extend(embeddings)
 

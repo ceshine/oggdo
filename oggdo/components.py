@@ -40,9 +40,9 @@ class BertWrapper(nn.Module):
     def forward(self, features) -> Dict:
         """Returns token_embeddings, cls_token"""
         _, _, hidden_states = self.bert(
-            input_ids=features['input_ids'],
-            token_type_ids=features.get('token_type_ids', None),
-            attention_mask=features['input_mask']
+            features['input_ids'],
+            features['input_mask'],
+            features.get('token_type_ids', torch.ones_like(features['input_mask']).long()),
         )
         features.update({
             'hidden_states': hidden_states,

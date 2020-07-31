@@ -1,6 +1,7 @@
 import logging
 import argparse
 
+import torch
 import pandas as pd
 from opencc import OpenCC
 from sklearn.metrics.pairwise import paired_cosine_distances
@@ -8,6 +9,11 @@ from sklearn.metrics.pairwise import paired_cosine_distances
 from oggdo.encoder import SentenceEncoder
 from oggdo.evaluation import EmbeddingSimilarityEvaluator, SimilarityFunction
 
+try:
+    from apex import amp
+    APEX = True
+except:
+    APEX = False
 
 logging.basicConfig(
     format='%(asctime)s - %(message)s',
@@ -52,6 +58,19 @@ def raw(args, encoder):
 def main(args):
     encoder = SentenceEncoder(model_path=args.model_path)
     encoder.eval()
+    if APEX and args.amp and (not args.torchscript):
+        encoder = amp.initialize(encoder, opt_level=args.amp)
+    if args.torchscript:
+        if args.amp:
+            encoder[0].bert = encoder[0].bert.half()
+        traced_model = torch.jit.trace(
+            encoder[0].bert,
+            (torch.zeros(8, 256).long().cuda(),
+             torch.zeros(8, 256).long().cuda(),
+             torch.ones(8, 256).long().cuda())
+        )
+        encoder[0].bert = traced_model
+        assert isinstance(encoder[0].bert, torch.jit.TopLevelTracedModule)
     encoder.max_seq_length = 256
     print(encoder[1].get_config_dict())
     encoder[1].pooling_mode_cls_token = False
@@ -68,6 +87,8 @@ if __name__ == "__main__":
     arg = parser.add_argument
     arg('--file', type=str, default="data/annotated.csv")
     arg('--t2s', action="store_true")
+    arg('--amp', type=str, default="")
+    arg('--torchscript', action="store_true")
     arg('--model-path', type=str, default="pretrained_models/bert_wwm_ext/")
     args = parser.parse_args()
     main(args)
