@@ -12,7 +12,7 @@ setup(
     url="https://github.com/ceshine/oggdo",
     packages=find_packages(exclude=['scripts']),
     install_requires=[
-        "transformers>=2.1.1",
+        "transformers>=4.3.3",
         "tqdm",
         "torch>=1.3.0",
         "numpy",
