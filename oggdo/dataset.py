@@ -146,10 +146,10 @@ class NewsSimilarityDataset(Dataset):
 
 class SentenceDataset(Dataset):
     def __init__(self, tokenizer, sentences):
-        self.text = np.asarray([
+        self.text = [
             tokenizer.encode(text, add_special_tokens=False)
             for text in sentences
-        ])
+        ]
 
     def __getitem__(self, item):
         return self.text[item]

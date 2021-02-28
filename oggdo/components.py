@@ -28,6 +28,7 @@ class BertWrapper(nn.Module):
 
         config = BertConfig.from_pretrained(model_name_or_path)
         config.output_hidden_states = True
+        config.return_dict = False
         self.bert = BertModel.from_pretrained(
             model_name_or_path, config=config)
         self.tokenizer = BertTokenizer.from_pretrained(
@@ -42,7 +43,7 @@ class BertWrapper(nn.Module):
         _, _, hidden_states = self.bert(
             features['input_ids'],
             features['input_mask'],
-            features.get('token_type_ids', torch.ones_like(features['input_mask']).long()),
+            features.get('token_type_ids', torch.ones_like(features['input_mask']).long())
         )
         features.update({
             'hidden_states': hidden_states,
