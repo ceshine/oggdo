@@ -137,7 +137,7 @@ class NewsSimilarityDataset(Dataset):
         return (
             self.text_1[item],
             self.text_2[item],
-            self.labels[item]
+            self.labels[item].astype(np.float32)
         )
 
     def __len__(self):

@@ -6,4 +6,4 @@ joblib
 transformers==2.3.0
 tqdm
 typer
-https://github.com/ceshine/pytorch-helper-bot/archive/master.zip
+https://github.com/ceshine/pytorch-helper-bot/archive/0.7.0.zip

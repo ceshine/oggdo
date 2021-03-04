@@ -1,10 +1,10 @@
 import json
-import argparse
 from pathlib import Path
 from functools import partial
 from dataclasses import dataclass
 from typing import Tuple, Dict
 
+import typer
 import numpy as np
 import pandas as pd
 import joblib
@@ -14,22 +14,28 @@ from torch.utils.data import DataLoader
 from torch.optim.lr_scheduler import CosineAnnealingLR
 from sklearn.model_selection import ShuffleSplit
 from scipy.stats import spearmanr
-from helperbot import (
+from pytorch_helper_bot import (
     BaseBot, LearningRateSchedulerCallback,
     MovingAverageStatsTrackerCallback,
     CheckpointCallback,
     MultiStageScheduler, LinearLR,
     AdamW
 )
-from helperbot.metrics import Metric
+from pytorch_helper_bot.metrics import Metric
 
 from oggdo.dataset import NewsSimilarityDataset
 from oggdo.dataloading import SortSampler, SortishSampler, collate_pairs
 from oggdo.components import BertWrapper, PoolingLayer
 from oggdo.encoder import SentenceEncoder
 from oggdo.models import SentencePairCosineSimilarity
-from .finetune_lcqmc import CosineSimilarityBot, ScalerDebugCallback, pair_max_len
+from finetune_lcqmc import CosineSimilarityBot, ScalerDebugCallback, pair_max_len
 from scripts.bert_eval_custom import convert_t2s
+
+try:
+    from apex import amp
+    APEX = True
+except:
+    APEX = False
 
 CACHE_DIR = Path('./cache/')
 CACHE_DIR.mkdir(exist_ok=True, parents=True)
@@ -82,10 +88,14 @@ def get_optimizer(model, lr):
     return AdamW(params, lr=lr)
 
 
-def finetune(args, model, train_loader, valid_loader, criterion) -> CosineSimilarityBot:
-    total_steps = len(train_loader) * args.epochs
-    optimizer = get_optimizer(model, args.lr)
-    if args.debug:
+def finetune(
+    model, epochs, lr, debug, grad_accu,
+    train_loader, valid_loader, criterion, use_amp
+) -> CosineSimilarityBot:
+    total_steps = len(train_loader) * epochs
+    optimizer = get_optimizer(model, lr)
+
+    if debug:
         print(
             "No decay:",
             [n for n, p in model.named_parameters()
@@ -121,6 +131,12 @@ def finetune(args, model, train_loader, valid_loader, criterion) -> CosineSimila
     ]
     if model.linear_transform:
         callbacks.append(ScalerDebugCallback())
+
+    if APEX and use_amp:
+        model, optimizer = amp.initialize(
+            model, optimizer, opt_level=use_amp
+        )
+
     bot = CosineSimilarityBot(
         model=model,
         train_loader=train_loader,
@@ -132,8 +148,8 @@ def finetune(args, model, train_loader, valid_loader, criterion) -> CosineSimila
         callbacks=callbacks,
         pbar=True,
         use_tensorboard=False,
-        use_amp=False,
-        gradient_accumulation_steps=args.grad_accu,
+        use_amp=use_amp and APEX,
+        gradient_accumulation_steps=grad_accu,
         metrics=(SpearmanCorrelation(),)
     )
     bot.logger.info("train batch size: %d", train_loader.batch_size)
@@ -177,7 +193,7 @@ def load_model(model_path: str, linear_transform):
     return model
 
 
-def get_splitted_data(args) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+def get_splitted_data() -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     cache_file = CACHE_DIR / "annotated_splitted.jl"
     if cache_file.exists():
         print("[Warning] Using cached splitted data...")
@@ -197,16 +213,17 @@ def get_splitted_data(args) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     return df_train, df_valid, df_test
 
 
-def get_loaders(embedder, args) -> Tuple[DataLoader, DataLoader]:
-    df_train, df_valid, df_test = get_splitted_data(args)
-    if args.t2s:
+def get_loaders(embedder, t2s, workers, batch_size, sample_train) -> Tuple[DataLoader, DataLoader, DataLoader]:
+    df_train, df_valid, df_test = get_splitted_data()
+    if t2s:
+        print("Converting traditional to simplified...")
         for df in (df_train, df_valid, df_test):
             df["text_1"] = df["text_1"].apply(convert_t2s)
             df["text_2"] = df["text_2"].apply(convert_t2s)
     print(df_valid.text_1.head(2))
     print(df_test.text_1.head(2))
-    if args.sample_train > 0 and args.sample_train < 1:
-        df_train = df_train.sample(frac=args.sample_train)
+    if sample_train > 0 and sample_train < 1:
+        df_train = df_train.sample(frac=sample_train)
     ds_train = NewsSimilarityDataset(
         embedder.tokenizer, df_train)
     train_loader = DataLoader(
@@ -214,7 +231,7 @@ def get_loaders(embedder, args) -> Tuple[DataLoader, DataLoader]:
         sampler=SortishSampler(
             ds_train,
             key=pair_max_len(ds_train),
-            bs=args.batch_size
+            bs=batch_size
         ),
         collate_fn=partial(
             collate_pairs,
@@ -223,8 +240,8 @@ def get_loaders(embedder, args) -> Tuple[DataLoader, DataLoader]:
             closing_id=embedder.sep_token_id,
             truncate_length=embedder.max_seq_length
         ),
-        batch_size=args.batch_size,
-        num_workers=args.workers
+        batch_size=batch_size,
+        num_workers=workers
     )
     ds_valid = NewsSimilarityDataset(
         embedder.tokenizer, df_valid)
@@ -241,8 +258,8 @@ def get_loaders(embedder, args) -> Tuple[DataLoader, DataLoader]:
             closing_id=embedder.sep_token_id,
             truncate_length=embedder.max_seq_length
         ),
-        batch_size=args.batch_size * 2,
-        num_workers=args.workers
+        batch_size=batch_size * 2,
+        num_workers=0
     )
     ds_test = NewsSimilarityDataset(
         embedder.tokenizer, df_test)
@@ -259,43 +276,35 @@ def get_loaders(embedder, args) -> Tuple[DataLoader, DataLoader]:
             closing_id=embedder.sep_token_id,
             truncate_length=embedder.max_seq_length
         ),
-        batch_size=args.batch_size * 2,
-        num_workers=args.workers
+        batch_size=batch_size * 2,
+        num_workers=0
     )
     return train_loader, valid_loader, test_loader
 
 
-def main():
-    parser = argparse.ArgumentParser()
-    arg = parser.add_argument
-    arg('mode', type=str)
-    arg('model_path', type=str)
-    arg('--sample-train', type=float, default=-1)
-    arg('--batch-size', type=int, default=16)
-    arg('--grad-accu', type=int, default=2)
-    arg('--lr', type=float, default=3e-5)
-    arg('--workers', type=int, default=2)
-    arg('--t2s', action="store_true")
-    arg('--epochs', type=int, default=3)
-    arg('--linear-transform', action='store_true')
-    arg('--debug', action='store_true')
-    args = parser.parse_args()
-
-    if args.mode == "train":
+def main(
+    mode: str, model_path: str = "pretrained_models/bert_wwm_ext/",
+    sample_train: float = -1,
+    batch_size: int = 16, grad_accu: int = 2,
+    lr: float = 3e-5, workers: int = 2, t2s: bool = False,
+    epochs: int = 3, linear_transform: bool = False,
+    debug: bool = False, use_amp: str = ""
+):
+    if mode == "train":
         # criterion = nn.L1Loss()
         criterion = nn.MSELoss()
-        model = load_model(args.model_path, args.linear_transform)
+        model = load_model(model_path, linear_transform)
 
         train_loader, valid_loader, test_loader = get_loaders(
-            model.encoder[0], args)
+            model.encoder[0], t2s, workers, batch_size, sample_train)
 
         print(f'{len(train_loader.dataset):,} items in train, '
               f'{len(valid_loader.dataset):,} in valid, '
               f'{len(test_loader.dataset):,} in test.')
 
         bot = finetune(
-            args, model, train_loader,
-            valid_loader, criterion
+            model, epochs, lr, debug, grad_accu,
+            train_loader, valid_loader, criterion, use_amp
         )
 
         test_metrics = bot.eval(test_loader)
@@ -303,11 +312,17 @@ def main():
 
         model.save(str(MODEL_DIR / "tmp_news_sim"))
         (MODEL_DIR / "tmp_news_sim" / 'params.json').write_text(
-            json.dumps(vars(args), indent=4, sort_keys=True))
-    elif args.mode == "eval":
-        model = SentencePairCosineSimilarity.load(args.model_path)
+            json.dumps(dict(
+                mode=mode, model_path=model_path, sample_train=sample_train,
+                batch_size=batch_size, grad_accu=grad_accu, lr=lr,
+                workers=workers, t2s=t2s, epochs=epochs,
+                linear_transform=linear_transform, debug=debug,
+                use_amp=use_amp
+            ), indent=4, sort_keys=True))
+    elif mode == "eval":
+        model = SentencePairCosineSimilarity.load(model_path)
         _, valid_loader, test_loader = get_loaders(
-            model.encoder[0], args)
+            model.encoder[0], t2s, workers, batch_size, sample_train)
         print(f'{len(valid_loader.dataset):,} in valid, '
               f'{len(test_loader.dataset):,} in test.')
         bot = CosineSimilarityBot(
@@ -320,7 +335,7 @@ def main():
             callbacks=None,
             pbar=False,
             use_tensorboard=False,
-            use_amp=False
+            use_amp=APEX and use_amp
         )
         print("=" * 20)
         print("Validation")
@@ -355,4 +370,4 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    typer.run(main)

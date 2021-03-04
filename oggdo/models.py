@@ -35,7 +35,7 @@ class SentencePairCosineSimilarity(nn.Module):
         self.encoder = sentence_encoder
         self.to(self.encoder.device)
 
-    def forward(self, features) -> torch.Tensor:
+    def forward(self, **features) -> torch.Tensor:
         embeddings = self.encoder(features)["sentence_embeddings"]
         assert len(embeddings) % 2 == 0
         embeddings_1 = embeddings[:len(embeddings) // 2]
@@ -112,13 +112,13 @@ class SentencePairNliClassification(nn.Module):
         if concatenation_sent_multiplication:
             num_vectors_concatenated += 1
 
-        self.classifier = nn .Linear(
+        self.classifier = nn.Linear(
             num_vectors_concatenated * self.sentence_embeddings_dim,
             n_classes
         )
         self.to(self.encoder.device)
 
-    def forward(self, features):
+    def forward(self, **features):
         embeddings = self.encoder(features)["sentence_embeddings"]
         assert len(embeddings) % 2 == 0
         embeddings_1 = embeddings[:len(embeddings) // 2]
