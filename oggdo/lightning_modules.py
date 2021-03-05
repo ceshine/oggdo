@@ -95,12 +95,12 @@ class SimilarityModule(pls.BaseModule):
     def configure_optimizers(self):
         params = [
             {
-                'params': [p for n, p in self.model.encoder.named_parameters()
+                'params': [p for n, p in self.model.named_parameters()
                            if not any(nd in n for nd in NO_DECAY)],
                 'weight_decay': self.config.weight_decay
             },
             {
-                'params': [p for n, p in self.model.encoder.named_parameters()
+                'params': [p for n, p in self.model.named_parameters()
                            if any(nd in n for nd in NO_DECAY)],
                 'weight_decay': 0
             }
@@ -115,8 +115,8 @@ class SimilarityModule(pls.BaseModule):
         print("Steps per epochs:", steps_per_epochs)
         n_steps = steps_per_epochs * self.config.epochs
         lr_durations = [
-            int(n_steps*0.05),
-            int(np.ceil(n_steps*0.95)) + 1
+            int(n_steps*0.1),
+            int(np.ceil(n_steps*0.9)) + 1
         ]
         break_points = [0] + list(np.cumsum(lr_durations))[:-1]
         scheduler = {
@@ -135,6 +135,20 @@ class SimilarityModule(pls.BaseModule):
         return {
             'optimizer': optimizer,
             'lr_scheduler': scheduler
+        }
+
+
+class NliModule(SimilarityModule):
+    def validation_step(self, batch, batch_idx):
+        output = self.forward(batch[0])
+        loss = self.config.loss_fn(
+            output,
+            batch[1]
+        )
+        return {
+            'loss': loss,
+            'pred': torch.argmax(torch.softmax(output, dim=-1), dim=-1),
+            'target': batch[1]
         }
 
 
@@ -233,9 +247,15 @@ class SentencePairDataModule(pl.LightningDataModule):
     def _get_splitted_data(self):
         df = pd.read_csv(self.data_path)
         if self.t2s:
-            df["text"] = df["text"].apply(convert_t2s)
+            for col in ("text_1", "text_2", "premise", "hypo"):
+                if col in df:
+                    df[col] = df[col].apply(convert_t2s)
         if "similarity" in df:
             df["labels"] = df.similarity.astype("category")
+        if "hypo" in df:
+            df["labels"] = np.zeros(df.label.shape[0], dtype=np.int64)
+            df.loc[df.label == "neutral", "labels"] = 1
+            df.loc[df.label == "entailment", "labels"] = 2
         sss = StratifiedShuffleSplit(
             n_splits=1, test_size=0.3, random_state=666)
         train_idx, rest_idx = next(sss.split(df, df.labels))

@@ -51,6 +51,32 @@ class LcqmcDataset(Dataset):
         return len(self.labels)
 
 
+class XnliDfDataset(Dataset):
+    def __init__(
+            self,
+            tokenizer,
+            df):
+        self.text_1 = np.asarray([
+            tokenizer.encode(text, add_special_tokens=False)
+            for text in df.premise.values
+        ])
+        self.text_2 = np.asarray([
+            tokenizer.encode(text, add_special_tokens=False)
+            for text in df.hypo.values
+        ])
+        self.labels = df["labels"].values
+
+    def __getitem__(self, item):
+        return (
+            self.text_1[item],
+            self.text_2[item],
+            self.labels[item]
+        )
+
+    def __len__(self):
+        return len(self.labels)
+
+
 class XnliDataset(Dataset):
     def __init__(
             self,
