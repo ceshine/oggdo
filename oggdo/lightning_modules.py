@@ -97,7 +97,7 @@ class SimilarityModule(pls.BaseModule):
             {
                 'params': [p for n, p in self.model.encoder.named_parameters()
                            if not any(nd in n for nd in NO_DECAY)],
-                'weight_decay': 0.1
+                'weight_decay': self.config.weight_decay
             },
             {
                 'params': [p for n, p in self.model.encoder.named_parameters()
@@ -106,8 +106,7 @@ class SimilarityModule(pls.BaseModule):
             }
         ]
         optimizer = self.config.optimizer_cls(
-            params, lr=self.config.learning_rate,
-            weight_decay=self.config.weight_decay
+            params, lr=self.config.learning_rate
         )
         steps_per_epochs = math.floor(
             len(self.train_dataloader().dataset) / self.config.batch_size /

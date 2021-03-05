@@ -1,12 +1,15 @@
 import os
 import json
 import logging
-from typing import List, Dict
+from typing import List, Dict, Optional
 
 import torch
 from torch import nn
 import numpy as np
-from transformers import BertModel, BertTokenizer, BertConfig, AutoTokenizer, AutoConfig, AutoModel
+from transformers import (
+    BertModel, BertConfig, AutoTokenizer, AutoConfig, AutoModel, BertTokenizerFast,
+    ElectraConfig, ElectraModel, ElectraTokenizerFast
+)
 
 
 class TransformerWrapper(nn.Module):
@@ -15,7 +18,9 @@ class TransformerWrapper(nn.Module):
     Might not work for all models. Sub-class when necessary.
     """
 
-    def __init__(self, model_name_or_path: str, max_seq_length: int = 128, do_lower_case: bool = True):
+    def __init__(
+            self, model_name_or_path: str, max_seq_length: int = 128, do_lower_case: bool = True,
+            model_type: Optional[str] = None):
         super().__init__()
         self.config_keys = ['max_seq_length', 'do_lower_case']
         self.do_lower_case = do_lower_case
@@ -27,12 +32,28 @@ class TransformerWrapper(nn.Module):
         #     max_seq_length = 510
         self.max_seq_length = max_seq_length
 
-        config = AutoConfig.from_pretrained(model_name_or_path)
+        config_cls = AutoConfig
+        tokenizer_cls = AutoTokenizer
+        model_cls = AutoModel
+
+        if model_type:
+            if model_type == "bert":
+                model_cls = BertModel
+                config_cls = BertConfig
+                tokenizer_cls = BertTokenizerFast
+            elif model_type == "electra":
+                model_cls = ElectraModel
+                config_cls = ElectraConfig
+                tokenizer_cls = ElectraTokenizerFast
+            else:
+                raise ValueError(f"{model_type} is not supported!")
+
+        config = config_cls.from_pretrained(model_name_or_path)
         config.output_hidden_states = True
         config.return_dict = True
-        self.transformer = AutoModel.from_pretrained(
+        self.transformer = model_cls.from_pretrained(
             model_name_or_path, config=config)
-        self.tokenizer = AutoTokenizer.from_pretrained(
+        self.tokenizer = tokenizer_cls.from_pretrained(
             model_name_or_path, do_lower_case=do_lower_case)
         self.cls_token_id = self.tokenizer.convert_tokens_to_ids(
             [self.tokenizer.cls_token])[0]

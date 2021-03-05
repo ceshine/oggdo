@@ -1,6 +1,7 @@
 import os
 import json
 from pathlib import Path
+from typing import Optional
 from dataclasses import asdict
 
 import torch
@@ -23,22 +24,23 @@ DATA_PATH = Path("data/annotated.csv")
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 
-def load_model(model_path: str, linear_transform):
+def load_model(model_path: str, linear_transform, model_type):
     model_path_ = Path(model_path)
     if (model_path_ / "modules.json").exists():
         encoder = SentenceEncoder(str(model_path))
-        encoder[1].pooling_mode_mean_tokens = True
-        encoder[1].pooling_mode_cls_token = False
+        encoder[1].pooling_mode_mean_tokens = False
+        encoder[1].pooling_mode_cls_token = True
         print(encoder[1].get_config_dict())
     else:
         embedder = TransformerWrapper(
             model_path,
-            max_seq_length=256
+            max_seq_length=256,
+            model_type=model_type
         )
         pooler = PoolingLayer(
             embedder.get_word_embedding_dimension(),
-            pooling_mode_mean_tokens=True,
-            pooling_mode_cls_token=False,
+            pooling_mode_mean_tokens=False,
+            pooling_mode_cls_token=True,
             pooling_mode_max_tokens=False,
             layer_to_use=-1
         )
@@ -60,10 +62,11 @@ def main(
     batch_size: int = 16, grad_accu: int = 2,
     lr: float = 3e-5, workers: int = 4, t2s: bool = False,
     epochs: int = 3, linear_transform: bool = False,
-    use_amp: bool = False, wd: float = 0
+    use_amp: bool = False, wd: float = 0,
+    model_type: Optional[str] = None
 ):
     pl.seed_everything(int(os.environ.get("SEED", 42)))
-    model = load_model(model_path, linear_transform)
+    model = load_model(model_path, linear_transform, model_type)
 
     config = CosineSimilarityConfig(
         model_path=model_path,
@@ -73,7 +76,7 @@ def main(
         learning_rate=lr, fp16=use_amp,
         epochs=epochs, loss_fn=torch.nn.MSELoss(),
         t2s=t2s, linear_transform=linear_transform,
-        optimizer_cls=torch.optim.AdamW,
+        optimizer_cls=pls.optimizers.RAdam,
         weight_decay=wd
     )
 
