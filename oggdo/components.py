@@ -110,8 +110,6 @@ class TransformerWrapper(nn.Module):
         input_ids[:sentence_length] = np.array(
             [self.cls_token_id] + tokens +
             [self.sep_token_id], dtype=np.int64)
-        # input_ids[:sentence_length] = np.array(
-        #     tokens, dtype=np.int64)
         token_type_ids = np.zeros(pad_seq_length, dtype=np.int64)
         input_mask = np.zeros(pad_seq_length, dtype=np.int64)
         input_mask[:sentence_length] = 1

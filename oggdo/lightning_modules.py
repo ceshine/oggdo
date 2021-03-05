@@ -1,9 +1,11 @@
 import math
+from pathlib import Path
 from functools import partial
 from dataclasses import dataclass, asdict
-from typing import Sequence, Callable, Type, Tuple, Dict
+from typing import Sequence, Callable, Type, Tuple, Dict, Optional
 
 import torch
+import joblib
 import numpy as np
 import pandas as pd
 from opencc import OpenCC
@@ -42,6 +44,7 @@ class BaseConfig:
     fp16: bool
     learning_rate: float
     weight_decay: float
+    layerwise_decay: float
     epochs: int
     # max_len: int
     loss_fn: Callable
@@ -62,13 +65,14 @@ class SimilarityModule(pls.BaseModule):
         self, config: BaseConfig, model: torch.nn.Module,
         metrics: Sequence[Tuple[str, pl.metrics.Metric]] = (
             ("spearman", pls.metrics.SpearmanCorrelation(sigmoid=False)),
-        )
+        ), layerwise_decay: float = 0
     ):
         super().__init__()
         self.config = config
         self.save_hyperparameters(asdict(config))
         self.model = model
         self.metrics = metrics
+        self.layerwise_decay = layerwise_decay
 
     def forward(self, features: Dict[str, torch.Tensor]):
         return self.model(**features)
@@ -93,21 +97,71 @@ class SimilarityModule(pls.BaseModule):
         return {"loss": loss, "log": batch_idx % self.trainer.accumulate_grad_batches == 0}
 
     def configure_optimizers(self):
-        params = [
-            {
-                'params': [p for n, p in self.model.named_parameters()
-                           if not any(nd in n for nd in NO_DECAY)],
-                'weight_decay': self.config.weight_decay
-            },
-            {
-                'params': [p for n, p in self.model.named_parameters()
-                           if any(nd in n for nd in NO_DECAY)],
-                'weight_decay': 0
-            }
-        ]
-        optimizer = self.config.optimizer_cls(
-            params, lr=self.config.learning_rate
-        )
+        if self.layerwise_decay > 0 and self.layerwise_decay < 1:
+            transformer = self.model.encoder[0].transformer
+            others = [(n, p) for n, p in self.model.named_parameters()
+                      if (".layer." not in n) and ("embeddings." not in n)]
+            params = [
+                {
+                    'params': [p for n, p in others
+                               if not any(nd in n for nd in NO_DECAY)],
+                    'weight_decay': self.config.weight_decay,
+                    "lr": self.config.learning_rate
+                },
+                {
+                    'params': [p for n, p in others
+                               if any(nd in n for nd in NO_DECAY)],
+                    'weight_decay': 0,
+                    "lr":  self.config.learning_rate
+                }
+            ]
+            for i, layer in enumerate(reversed(transformer.encoder.layer)):
+                params.extend([
+                    {
+                        'params': [p for n, p in layer.named_parameters()
+                                   if not any(nd in n for nd in NO_DECAY)],
+                        'weight_decay': self.config.weight_decay,
+                        "lr": self.config.learning_rate * (self.layerwise_decay ** i)
+                    },
+                    {
+                        'params': [p for n, p in layer.named_parameters()
+                                   if any(nd in n for nd in NO_DECAY)],
+                        'weight_decay': 0,
+                        "lr": self.config.learning_rate * (self.layerwise_decay ** i)
+                    }
+                ])
+            params.extend([
+                {
+                    'params': [p for n, p in transformer.embeddings.named_parameters()
+                               if not any(nd in n for nd in NO_DECAY)],
+                    'weight_decay': self.config.weight_decay * (self.layerwise_decay ** len(transformer.encoder.layer)),
+                    "lr": self.config.learning_rate
+                },
+                {
+                    'params': [p for n, p in transformer.embeddings.named_parameters()
+                               if any(nd in n for nd in NO_DECAY)],
+                    'weight_decay': 0,
+                    "lr": self.config.learning_rate * (self.layerwise_decay ** len(transformer.encoder.layer))
+                }
+            ])
+
+        else:
+            params = [
+                {
+                    'params': [p for n, p in self.model.named_parameters()
+                               if not any(nd in n for nd in NO_DECAY)],
+                    'weight_decay': self.config.weight_decay,
+                    "lr":  self.config.learning_rate
+                },
+                {
+                    'params': [p for n, p in self.model.named_parameters()
+                               if any(nd in n for nd in NO_DECAY)],
+                    'weight_decay': 0,
+                    "lr":  self.config.learning_rate
+                }
+            ]
+        optimizer = self.config.optimizer_cls(params)
+        # print(optimizer)
         steps_per_epochs = math.floor(
             len(self.train_dataloader().dataset) / self.config.batch_size /
             self.config.grad_accu  # / self.num_gpus # dpp mode
@@ -158,7 +212,9 @@ class SentencePairDataModule(pl.LightningDataModule):
         embedder: TransformerWrapper,
         config: BaseConfig,
         dataset_cls: Type[torch.utils.data.Dataset],
-        workers: int = 4
+        workers: int = 4,
+        cache_dir: Optional[str] = "cache/tokenized/",
+        name: str = ""
     ):
         super().__init__()
         self.config = config
@@ -169,23 +225,47 @@ class SentencePairDataModule(pl.LightningDataModule):
         self.dataset_cls = dataset_cls
         self.workers = workers
         self.sample_train = self.config.sample_train
+        self.cache_dir = cache_dir
+        self.name = name
+        self.ds_train, self.ds_valid, self.ds_test = None, None, None
 
     def setup(self, stage=None):
         df_train, df_valid, df_test = self._get_splitted_data()
         # Tokenize:
         if stage == "fit" or stage is None:
-            self.ds_train = self.dataset_cls(
-                self.embedder.tokenizer, df_train)
-            if self.sample_train > 0 and self.sample_train < 1:
-                df_train = df_train.sample(frac=self.sample_train)
-            self.ds_valid = self.dataset_cls(
-                self.embedder.tokenizer, df_valid)
-            print(f'{len(self.ds_train):,} items in train, '
-                  f'{len(self.ds_valid):,} in valid.')
-        elif stage == "test" or stage is None:
-            self.ds_test = self.dataset_cls(
-                self.embedder.tokenizer, df_test)
-            print(f'{len(self.ds_test):,} in test.')
+            if self.cache_dir:
+                cache_path = Path(self.cache_dir) / f"{self.name}_fit.cache"
+                if cache_path.exists():
+                    self.ds_train, self.ds_valid = joblib.load(
+                        cache_path
+                    )
+            if (self.ds_train is None) or (self.ds_train is None):
+                if self.sample_train > 0 and self.sample_train < 1:
+                    df_train = df_train.sample(frac=self.sample_train)
+                self.ds_train = self.dataset_cls(
+                    self.embedder.tokenizer, df_train)
+                self.ds_valid = self.dataset_cls(
+                    self.embedder.tokenizer, df_valid)
+                print(df_train.shape, df_valid.shape)
+                print(f'{len(self.ds_train):,} items in train, '
+                      f'{len(self.ds_valid):,} items in valid.')
+                if self.cache_dir:
+                    cache_path = Path(self.cache_dir) / f"{self.name}_fit.cache"
+                    joblib.dump([self.ds_train, self.ds_valid], cache_path)
+        if stage == "test" or stage is None:
+            if self.cache_dir:
+                cache_path = Path(self.cache_dir) / f"{self.name}_test.cache"
+                if cache_path.exists():
+                    self.ds_test = joblib.load(
+                        cache_path
+                    )
+            if self.ds_test is None:
+                self.ds_test = self.dataset_cls(
+                    self.embedder.tokenizer, df_test)
+                print(f'{len(self.ds_test):,} in test.')
+                if self.cache_dir:
+                    cache_path = Path(self.cache_dir) / f"{self.name}_test.cache"
+                    joblib.dump(self.ds_test, cache_path)
 
     def train_dataloader(self):
         return torch.utils.data.DataLoader(

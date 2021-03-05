@@ -31,11 +31,11 @@ NO_DECAY = [
 ]
 
 
-def load_model(model_path, model_type):
+def load_model(model_path, model_type, do_lower_case):
     embedder = TransformerWrapper(
         model_path,
         max_seq_length=256,
-        do_lower_case=False,
+        do_lower_case=do_lower_case,
         model_type=model_type
     )
     pooler = PoolingLayer(
@@ -60,10 +60,12 @@ def main(
     epochs: int = 3,
     use_amp: bool = False, wd: float = 0,
     model_type: Optional[str] = None,
-    data_path: str = "data/XNLI-1.0/train.csv"
+    data_path: str = "data/XNLI-1.0/train.csv",
+    layerwise_decay: float = 0,
+    lowercase: bool = False
 ):
     pl.seed_everything(int(os.environ.get("SEED", 42)))
-    model = load_model(model_path, model_type)
+    model = load_model(model_path, model_type, do_lower_case=lowercase)
 
     config = BaseConfig(
         model_path=model_path,
@@ -75,10 +77,14 @@ def main(
         t2s=t2s,
         # optimizer_cls=pls.optimizers.RAdam,
         optimizer_cls=torch.optim.AdamW,
-        weight_decay=wd
+        weight_decay=wd,
+        layerwise_decay=layerwise_decay
     )
 
-    pl_module = NliModule(config, model, metrics=(("accuracy", pl.metrics.Accuracy()),))
+    pl_module = NliModule(
+        config, model, metrics=(("accuracy", pl.metrics.Accuracy()),),
+        layerwise_decay=config.layerwise_decay
+    )
 
     data_module = SentencePairDataModule(
         model.encoder[0], config,
