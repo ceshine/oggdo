@@ -51,6 +51,10 @@ class TransformerWrapper(nn.Module):
         config = config_cls.from_pretrained(model_name_or_path)
         config.output_hidden_states = True
         config.return_dict = True
+
+        if model_type:
+            config.model_type = model_type
+
         self.transformer = model_cls.from_pretrained(
             model_name_or_path, config=config)
         self.tokenizer = tokenizer_cls.from_pretrained(
