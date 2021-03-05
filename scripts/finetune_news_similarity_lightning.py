@@ -9,7 +9,7 @@ import pytorch_lightning as pl
 import pytorch_lightning_spells as pls
 
 from oggdo.dataset import NewsSimilarityDataset
-from oggdo.components import BertWrapper, PoolingLayer
+from oggdo.components import TransformerWrapper, PoolingLayer
 from oggdo.encoder import SentenceEncoder
 from oggdo.models import SentencePairCosineSimilarity
 from oggdo.lightning_modules import CosineSimilarityConfig, SimilarityModule, SentencePairDataModule
@@ -20,6 +20,8 @@ MODEL_DIR = Path('./cache/models/')
 MODEL_DIR.mkdir(exist_ok=True, parents=True)
 DATA_PATH = Path("data/annotated.csv")
 
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
+
 
 def load_model(model_path: str, linear_transform):
     model_path_ = Path(model_path)
@@ -29,7 +31,7 @@ def load_model(model_path: str, linear_transform):
         encoder[1].pooling_mode_cls_token = False
         print(encoder[1].get_config_dict())
     else:
-        embedder = BertWrapper(
+        embedder = TransformerWrapper(
             model_path,
             max_seq_length=256
         )
@@ -53,7 +55,7 @@ def load_model(model_path: str, linear_transform):
 
 
 def main(
-    model_path: str = "pretrained_models/bert_wwm_ext/",
+    model_path: str = typer.Argument("pretrained_models/bert_wwm_ext/"),
     sample_train: float = -1,
     batch_size: int = 16, grad_accu: int = 2,
     lr: float = 3e-5, workers: int = 4, t2s: bool = False,
@@ -118,12 +120,13 @@ def main(
 
     trainer.test(datamodule=data_module)
 
-    model.save(str(MODEL_DIR / "tmp_news_sim"))
+    output_folder = MODEL_DIR / f"tmp_{Path(model_path).name}"
+    model.save(str(output_folder))
 
     config_dict = asdict(config)
     del config_dict["loss_fn"]
     del config_dict["optimizer_cls"]
-    (MODEL_DIR / "tmp_news_sim" / 'params.json').write_text(
+    (output_folder / 'params.json').write_text(
         json.dumps(config_dict, indent=4, sort_keys=True))
 
 

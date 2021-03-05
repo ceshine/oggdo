@@ -12,7 +12,7 @@ import pytorch_lightning_spells as pls
 from torch.optim.lr_scheduler import CosineAnnealingLR
 from sklearn.model_selection import StratifiedShuffleSplit
 
-from .components import BertWrapper
+from .components import TransformerWrapper
 from .dataloading import collate_pairs
 
 T2S = OpenCC('t2s')
@@ -142,7 +142,7 @@ class SimilarityModule(pls.BaseModule):
 class SentencePairDataModule(pl.LightningDataModule):
     def __init__(
         self,
-        embedder: BertWrapper,
+        embedder: TransformerWrapper,
         config: BaseConfig,
         dataset_cls: Type[torch.utils.data.Dataset],
         workers: int = 4

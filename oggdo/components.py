@@ -6,7 +6,116 @@ from typing import List, Dict
 import torch
 from torch import nn
 import numpy as np
-from transformers import BertModel, BertTokenizer, BertConfig
+from transformers import BertModel, BertTokenizer, BertConfig, AutoTokenizer, AutoConfig, AutoModel
+
+
+class TransformerWrapper(nn.Module):
+    """Generic transformer model based on AutoModel and AutoTokenizer
+
+    Might not work for all models. Sub-class when necessary.
+    """
+
+    def __init__(self, model_name_or_path: str, max_seq_length: int = 128, do_lower_case: bool = True):
+        super().__init__()
+        self.config_keys = ['max_seq_length', 'do_lower_case']
+        self.do_lower_case = do_lower_case
+
+        # TODO: maybe do this checking via the config file?
+        # if max_seq_length > 510:
+        #     logging.warning(
+        #         "BERT only allows a max_seq_length of 510 (512 with special tokens). Value will be set to 510")
+        #     max_seq_length = 510
+        self.max_seq_length = max_seq_length
+
+        config = AutoConfig.from_pretrained(model_name_or_path)
+        config.output_hidden_states = True
+        config.return_dict = True
+        self.transformer = AutoModel.from_pretrained(
+            model_name_or_path, config=config)
+        self.tokenizer = AutoTokenizer.from_pretrained(
+            model_name_or_path, do_lower_case=do_lower_case)
+        self.cls_token_id = self.tokenizer.convert_tokens_to_ids(
+            [self.tokenizer.cls_token])[0]
+        self.sep_token_id = self.tokenizer.convert_tokens_to_ids(
+            [self.tokenizer.sep_token])[0]
+
+    def forward(self, features) -> Dict:
+        """Returns token_embeddings, cls_token"""
+        output = self.transformer(
+            features['input_ids'],
+            features['input_mask'],
+            features.get('token_type_ids', torch.ones_like(features['input_mask']).long())
+        )
+        features.update({
+            'hidden_states': output["hidden_states"],
+            # 'input_mask': features['input_mask'] # No point in this line? (ceshine)
+        })
+        return features
+
+    def get_word_embedding_dimension(self) -> int:
+        return self.transformer.config.hidden_size
+
+    def tokenize(self, text: str) -> List[int]:
+        """
+        Tokenizes a text and maps tokens to token-ids
+        """
+        # return self.tokenizer.convert_tokens_to_ids(
+        #     self.tokenizer.tokenize(text)
+        # )
+        return self.tokenizer.encode(text, add_special_tokens=False)
+
+    def get_sentence_features(self, tokens: List[str], pad_seq_length: int) -> Dict:
+        """
+        Convert tokenized sentence in its embedding ids, segment ids and mask
+
+        :param tokens:
+            a tokenized sentence
+        :param pad_seq_length:
+            the maximal length of the sequence. Cannot be greater than self.sentence_transformer_config.max_seq_length
+        :return: embedding ids, segment ids and mask for the sentence
+        """
+        pad_seq_length = min(pad_seq_length, self.max_seq_length) + 2
+
+        # Truncate to the left
+        tokens = tokens[:pad_seq_length - 2]
+        sentence_length = len(tokens) + 2
+
+        # Zero-pad up to the sequence length. BERT: Pad to the right
+        input_ids = np.zeros(pad_seq_length, dtype=np.int64)
+        input_ids[:sentence_length] = np.array(
+            [self.cls_token_id] + tokens +
+            [self.sep_token_id], dtype=np.int64)
+        # input_ids[:sentence_length] = np.array(
+        #     tokens, dtype=np.int64)
+        token_type_ids = np.zeros(pad_seq_length, dtype=np.int64)
+        input_mask = np.zeros(pad_seq_length, dtype=np.int64)
+        input_mask[:sentence_length] = 1
+
+        assert len(input_ids) == pad_seq_length
+        assert len(input_mask) == pad_seq_length
+        assert len(token_type_ids) == pad_seq_length
+
+        return {
+            'input_ids': input_ids,
+            'token_type_ids': token_type_ids,
+            'input_mask': input_mask
+            # 'sentence_lengths': sentence_length
+        }
+
+    def get_config_dict(self):
+        return {key: self.__dict__[key] for key in self.config_keys}
+
+    def save(self, output_path: str):
+        self.transformer.save_pretrained(output_path)
+        self.tokenizer.save_pretrained(output_path)
+        with open(os.path.join(output_path, 'oggdo_config.json'), 'w') as fOut:
+            json.dump(self.get_config_dict(), fOut, indent=2)
+
+    @staticmethod
+    def load(input_path: str):
+        with open(os.path.join(input_path, 'oggdo_config.json')) as fIn:
+            config = json.load(fIn)
+        return TransformerWrapper(model_name_or_path=input_path, **config)
 
 
 class BertWrapper(nn.Module):
