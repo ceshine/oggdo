@@ -236,6 +236,7 @@ class SentencePairDataModule(pl.LightningDataModule):
             if self.cache_dir:
                 cache_path = Path(self.cache_dir) / f"{self.name}_fit.cache"
                 if cache_path.exists():
+                    print("Loading cached dataset...")
                     self.ds_train, self.ds_valid = joblib.load(
                         cache_path
                     )
@@ -246,12 +247,12 @@ class SentencePairDataModule(pl.LightningDataModule):
                     self.embedder.tokenizer, df_train)
                 self.ds_valid = self.dataset_cls(
                     self.embedder.tokenizer, df_valid)
-                print(df_train.shape, df_valid.shape)
-                print(f'{len(self.ds_train):,} items in train, '
-                      f'{len(self.ds_valid):,} items in valid.')
                 if self.cache_dir:
                     cache_path = Path(self.cache_dir) / f"{self.name}_fit.cache"
                     joblib.dump([self.ds_train, self.ds_valid], cache_path)
+            print(df_train.shape, df_valid.shape)
+            print(f'{len(self.ds_train):,} items in train, '
+                  f'{len(self.ds_valid):,} items in valid.')
         if stage == "test" or stage is None:
             if self.cache_dir:
                 cache_path = Path(self.cache_dir) / f"{self.name}_test.cache"
@@ -262,10 +263,10 @@ class SentencePairDataModule(pl.LightningDataModule):
             if self.ds_test is None:
                 self.ds_test = self.dataset_cls(
                     self.embedder.tokenizer, df_test)
-                print(f'{len(self.ds_test):,} in test.')
                 if self.cache_dir:
                     cache_path = Path(self.cache_dir) / f"{self.name}_test.cache"
                     joblib.dump(self.ds_test, cache_path)
+            print(f'{len(self.ds_test):,} in test.')
 
     def train_dataloader(self):
         return torch.utils.data.DataLoader(

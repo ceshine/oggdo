@@ -7,3 +7,5 @@ transformers==2.3.0
 tqdm
 typer
 https://github.com/ceshine/pytorch-helper-bot/archive/0.7.0.zip
+pytorch-lightning>=1.2.1
+https://github.com/veritable-tech/pytorch-lightning-spellsarchive/0.0.2.zip

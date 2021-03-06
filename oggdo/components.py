@@ -163,7 +163,7 @@ class BertWrapper(nn.Module):
         config.return_dict = False
         self.bert = BertModel.from_pretrained(
             model_name_or_path, config=config)
-        self.tokenizer = BertTokenizer.from_pretrained(
+        self.tokenizer = BertTokenizerFast.from_pretrained(
             model_name_or_path, do_lower_case=do_lower_case)
         self.cls_token_id = self.tokenizer.convert_tokens_to_ids(
             [self.tokenizer.cls_token])[0]

@@ -19,7 +19,6 @@ CACHE_DIR = Path('./cache/')
 CACHE_DIR.mkdir(exist_ok=True, parents=True)
 MODEL_DIR = Path('./cache/models/')
 MODEL_DIR.mkdir(exist_ok=True, parents=True)
-DATA_PATH = Path("data/annotated.csv")
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
@@ -58,11 +57,13 @@ def load_model(model_path: str, linear_transform, model_type):
 
 def main(
     model_path: str = typer.Argument("pretrained_models/bert_wwm_ext/"),
+    data_path: str = typer.Argument("data/annotated.csv"),
     sample_train: float = -1,
     batch_size: int = 16, grad_accu: int = 2,
     lr: float = 3e-5, workers: int = 4, t2s: bool = False,
     epochs: int = 3, linear_transform: bool = False,
     use_amp: bool = False, wd: float = 0,
+    layerwise_decay: float = 0,
     model_type: Optional[str] = None
 ):
     pl.seed_everything(int(os.environ.get("SEED", 42)))
@@ -70,32 +71,39 @@ def main(
 
     config = CosineSimilarityConfig(
         model_path=model_path,
-        data_path=str(DATA_PATH),
+        data_path=data_path,
         sample_train=sample_train,
         batch_size=batch_size, grad_accu=grad_accu,
         learning_rate=lr, fp16=use_amp,
-        epochs=epochs, loss_fn=torch.nn.MSELoss(),
+        epochs=epochs,
+        loss_fn=torch.nn.MSELoss(),
+        # loss_fn=torch.nn.L1Loss(),
         t2s=t2s, linear_transform=linear_transform,
         optimizer_cls=pls.optimizers.RAdam,
-        weight_decay=wd
+        weight_decay=wd,
+        layerwise_decay=layerwise_decay
     )
 
-    pl_module = SimilarityModule(config, model)
+    pl_module = SimilarityModule(
+        config, model,
+        layerwise_decay=config.layerwise_decay)
 
     data_module = SentencePairDataModule(
         model.encoder[0], config,
-        dataset_cls=NewsSimilarityDataset, workers=workers
+        dataset_cls=NewsSimilarityDataset, workers=workers,
+        name="news"
     )
 
+    checkpoints = pl.callbacks.ModelCheckpoint(
+        dirpath=str(CACHE_DIR / "model_checkpoints"),
+        monitor='val_spearman',
+        mode="max",
+        filename='{step:06d}-{val_loss:.4f}',
+        save_top_k=1,
+        save_last=False
+    )
     callbacks = [
-        pl.callbacks.ModelCheckpoint(
-            dirpath=str(CACHE_DIR / "model_checkpoints"),
-            monitor='val_loss',
-            mode="max",
-            filename='{step:06d}-{val_loss:.4f}',
-            save_top_k=1,
-            save_last=False
-        ),
+        checkpoints,
         pl.callbacks.LearningRateMonitor(logging_interval='step'),
     ]
 
@@ -121,9 +129,11 @@ def main(
 
     trainer.fit(pl_module, datamodule=data_module)
 
+    pl_module.load_state_dict(torch.load(checkpoints.best_model_path)["state_dict"])
+
     trainer.test(datamodule=data_module)
 
-    output_folder = MODEL_DIR / f"tmp_{Path(model_path).name}"
+    output_folder = MODEL_DIR / f"news_{Path(model_path).name}"
     model.save(str(output_folder))
 
     config_dict = asdict(config)

@@ -1,7 +1,6 @@
 import os
 import json
 from pathlib import Path
-from functools import partial
 from dataclasses import asdict
 from typing import Tuple, Dict, Optional
 
@@ -13,7 +12,6 @@ import pytorch_lightning as pl
 import pytorch_lightning_spells as pls
 
 from oggdo.dataset import XnliDfDataset
-from oggdo.dataloading import SortSampler, SortishSampler
 from oggdo.components import TransformerWrapper, PoolingLayer
 from oggdo.encoder import SentenceEncoder
 from oggdo.models import SentencePairNliClassification
@@ -40,8 +38,8 @@ def load_model(model_path, model_type, do_lower_case):
     )
     pooler = PoolingLayer(
         embedder.get_word_embedding_dimension(),
-        pooling_mode_mean_tokens=True,
-        pooling_mode_cls_token=False,
+        pooling_mode_mean_tokens=False,
+        pooling_mode_cls_token=True,
         pooling_mode_max_tokens=False,
         layer_to_use=-1
     )
@@ -88,7 +86,8 @@ def main(
 
     data_module = SentencePairDataModule(
         model.encoder[0], config,
-        dataset_cls=XnliDfDataset, workers=workers
+        dataset_cls=XnliDfDataset, workers=workers,
+        name="xnli"
     )
 
     callbacks = [
