@@ -16,6 +16,10 @@ PORT = int(os.environ.get("PORT", "8666"))
 APP = FastAPI()
 T2S = OpenCC('t2s')
 MODEL: Optional[SentenceEncoder] = None
+if os.environ.get("MODEL", None):
+    MODEL = SentenceEncoder(os.environ["MODEL"], device="cpu")
+
+app = APP
 
 
 class TextInput(BaseModel):
@@ -35,11 +39,10 @@ def get_embeddings(text_input: TextInput):
     text = text_input.text.replace("\n", " ")
     if text_input.t2s:
         text = T2S.convert(text)
-    print(text)
     vector = MODEL.encode(
         [text],
         batch_size=1,
-        show_progress_bar=True
+        show_progress_bar=False
     )[0]
     return EmbeddingsResult(vector=vector.tolist())
 

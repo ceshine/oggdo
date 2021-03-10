@@ -17,7 +17,8 @@ setup(
         "torch>=1.3.0",
         "numpy",
         "scikit-learn",
-        "scipy"
+        "scipy",
+        "pandas"
     ],
     classifiers=[
         "Development Status :: 4 - Beta",

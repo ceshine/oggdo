@@ -1,0 +1,80 @@
+FROM ubuntu:20.04 AS BUILD
+
+LABEL maintainer="ceshine@ceshine.net"
+
+ARG PYTHON_VERSION=3.7
+ARG CONDA_PYTHON_VERSION=3
+ARG CONDA_DIR=/opt/conda
+ARG USERNAME=docker
+ARG USERID=1000
+
+# Instal basic utilities
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends git wget unzip bzip2 sudo build-essential && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
+# Install miniconda
+ENV PATH $CONDA_DIR/bin:$PATH
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates && \
+    wget -q https://repo.continuum.io/miniconda/Miniconda$CONDA_PYTHON_VERSION-latest-Linux-x86_64.sh -O /tmp/miniconda.sh && \
+    echo 'export PATH=$CONDA_DIR/bin:$PATH' > /etc/profile.d/conda.sh && \
+    /bin/bash /tmp/miniconda.sh -b -p $CONDA_DIR && \
+    conda install -y python=$PYTHON_VERSION && \
+    # conda install -c conda-forge mamba && \
+    conda clean -ay && \  
+    rm -rf /tmp/* && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
+RUN conda install -y pytorch cpuonly -c pytorch && conda clean -ay && du -sh /opt/
+
+# Create the user
+RUN useradd --create-home -s /bin/bash --no-user-group -u $USERID $USERNAME && \
+    chown $USERNAME $CONDA_DIR -R && \
+    adduser $USERNAME sudo && \
+    echo "$USERNAME ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
+
+RUN pip install --no-cache-dir https://github.com/ceshine/oggdo/archive/0.0.4.zip && conda clean -ay && du -sh /opt/
+RUN pip install --no-cache-dir typer opencc-python-reimplemented "uvicorn[standard]" gunicorn fastapi pandas && conda clean -ay && du -sh /opt/
+
+# Runtime image
+FROM ubuntu:20.04
+
+ARG CONDA_DIR=/opt/conda
+ARG USERNAME=docker
+ARG USERID=1000
+
+# Instal basic utilities
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends git wget unzip bzip2 sudo && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
+ENV PATH $CONDA_DIR/bin:$PATH
+ENV PATH=$PATH:$HOME/bin
+ENV MAX_WORKERS 1
+ENV WEB_CONCURRENCY 1
+ENV MODEL ./model/
+
+RUN mkdir -p /opt/conda/
+
+# Create the user
+RUN useradd --create-home -s /bin/bash --no-user-group -u $USERID $USERNAME && \
+    chown $USERNAME $CONDA_DIR -R && \
+    adduser $USERNAME sudo && \
+    echo "$USERNAME ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
+USER $USERNAME
+WORKDIR /src
+
+COPY --chown=1000 --from=build /opt/conda/. $CONDA_DIR
+
+# Add shell scripts from tiangolo/uvicorn-gunicorn
+COPY start.sh /src
+COPY gunicorn_conf.py /src
+COPY start-reload.sh /src/
+
+# Add the fastapi app
+COPY main.py /src
+
+CMD ["/src/start.sh"]
