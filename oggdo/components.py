@@ -8,7 +8,7 @@ from torch import nn
 import numpy as np
 from transformers import (
     BertModel, BertConfig, AutoTokenizer, AutoConfig, AutoModel, BertTokenizerFast,
-    ElectraConfig, ElectraModel, ElectraTokenizerFast
+    ElectraConfig, ElectraModel, ElectraTokenizerFast, DistilBertModel
 )
 
 
@@ -66,11 +66,17 @@ class TransformerWrapper(nn.Module):
 
     def forward(self, features) -> Dict:
         """Returns token_embeddings, cls_token"""
-        output = self.transformer(
-            features['input_ids'],
-            features['input_mask'],
-            features.get('token_type_ids', torch.ones_like(features['input_mask']).long())
-        )
+        if isinstance(self.transformer, DistilBertModel):
+            output = self.transformer(
+                input_ids=features['input_ids'],
+                attention_mask=features['input_mask']
+            )
+        else:
+            output = self.transformer(
+                input_ids=features['input_ids'],
+                input_masks=features['input_mask'],
+                token_type_ids=features.get('token_type_ids', torch.ones_like(features['input_mask']).long())
+            )
         features.update({
             'hidden_states': output["hidden_states"],
             # 'input_mask': features['input_mask'] # No point in this line? (ceshine)
