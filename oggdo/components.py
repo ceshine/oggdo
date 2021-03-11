@@ -74,7 +74,7 @@ class TransformerWrapper(nn.Module):
         else:
             output = self.transformer(
                 input_ids=features['input_ids'],
-                input_masks=features['input_mask'],
+                attention_mask=features['input_mask'],
                 token_type_ids=features.get('token_type_ids', torch.ones_like(features['input_mask']).long())
             )
         features.update({
