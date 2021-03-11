@@ -5,7 +5,7 @@ import typer
 import uvicorn
 from opencc import OpenCC
 from fastapi import FastAPI
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, constr
 
 from oggdo.encoder import SentenceEncoder
 
@@ -29,8 +29,17 @@ class TextInput(BaseModel):
     t2s: bool = False
 
 
+class BatchTextInput(BaseModel):
+    text_batch: List[constr(max_length=256)] = Field([], title="Pieces of text you want to create embeddings for.")
+    t2s: bool = False
+
+
 class EmbeddingsResult(BaseModel):
     vector: List[float]
+
+
+class BatchEmbeddingsResult(BaseModel):
+    vectors: List[List[float]]
 
 
 @APP.post("/", response_model=EmbeddingsResult)
@@ -44,7 +53,21 @@ def get_embeddings(text_input: TextInput):
         batch_size=1,
         show_progress_bar=False
     )[0]
-    return EmbeddingsResult(vector=vector.tolist())
+    return EmbeddingsResult(vectors=vector.tolist())
+
+
+@APP.post("/batch", response_model=BatchEmbeddingsResult)
+def get_batch_embeddings(text_input: BatchTextInput):
+    assert MODEL is not None, "MODEL is not loaded."
+    batch = [x.replace("\n", " ") for x in text_input.text_batch]
+    if text_input.t2s:
+        batch = [T2S.convert(x) for x in batch]
+    vectors = MODEL.encode(
+        batch,
+        batch_size=int(os.environ.get("BATCH_SIZE", 8)),
+        show_progress_bar=False
+    )
+    return BatchEmbeddingsResult(vectors=vectors.tolist())
 
 
 def main(model_path: str = typer.Argument("streamlit-model/")):
