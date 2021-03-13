@@ -24,13 +24,13 @@ app = APP
 
 class TextInput(BaseModel):
     text: str = Field(
-        None, title="The piece of text you want to create embeddings for.", max_length=256
+        None, title="The piece of text you want to create embeddings for.", max_length=384
     )
     t2s: bool = False
 
 
 class BatchTextInput(BaseModel):
-    text_batch: List[constr(max_length=256)] = Field([], title="Pieces of text you want to create embeddings for.")
+    text_batch: List[str] = Field([], title="Pieces of text you want to create embeddings for.")
     t2s: bool = False
 
 
