@@ -17,7 +17,7 @@ APP = FastAPI()
 T2S = OpenCC('t2s')
 MODEL: Optional[SentenceEncoder] = None
 if os.environ.get("MODEL", None):
-    MODEL = SentenceEncoder(os.environ["MODEL"], device="cpu")
+    MODEL = SentenceEncoder(os.environ["MODEL"], device="cpu").eval()
 
 app = APP
 
@@ -72,7 +72,7 @@ def get_batch_embeddings(text_input: BatchTextInput):
 
 def main(model_path: str = typer.Argument("streamlit-model/")):
     global MODEL
-    MODEL = SentenceEncoder(model_path, device="cpu")
+    MODEL = SentenceEncoder(model_path, device="cpu").eval()
     print(f"Listening to port {PORT}")
     uvicorn.run(APP, host='0.0.0.0', port=PORT)
 
