@@ -53,7 +53,7 @@ def get_embeddings(text_input: TextInput):
         batch_size=1,
         show_progress_bar=False
     )[0]
-    return EmbeddingsResult(vectors=vector.tolist())
+    return EmbeddingsResult(vector=vector.tolist())
 
 
 @APP.post("/batch", response_model=BatchEmbeddingsResult)
