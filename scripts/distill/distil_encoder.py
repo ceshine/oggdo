@@ -9,7 +9,7 @@ from torch import nn
 import pytorch_lightning as pl
 import pytorch_lightning_spells as pls
 from torch.utils.data import DataLoader
-from oggdo.dataset import DistillDataset
+from oggdo.dataset import DistillDataset, SBertDataset
 from oggdo.dataloading import SortSampler, SortishSampler, collate_singles
 from oggdo.lightning_modules import BaseConfig, SentenceEncoderModule
 
@@ -31,6 +31,7 @@ class EncoderWrapper(nn.Module):
 
 def main(
     model_path: str = "nreimers/TinyBERT_L-4_H-312_v2",
+    dataset: SBertDataset = "allnli",
     cache_folder: str = "cache/teacher_embs/", batch_size: int = 32,
     fp16: bool = False, workers: int = 2, grad_accu: int = 1,
     lr: float = 3e-5, epochs: int = 2, wd: float = 0,
@@ -51,15 +52,16 @@ def main(
         layerwise_decay=layerwise_decay
     )
 
-    sents, embs = joblib.load(Path(cache_folder) / "allnli_train.jbl")
+    sents, embs = joblib.load(Path(cache_folder) / f"{dataset.value}_train.jbl")
     encoder = load_encoder(
         model_path, None, 256, do_lower_case=True,
         mean_pooling=True, expand_to_dimension=embs.shape[1])
     # print(encoder)
     tokenizer = encoder[0].tokenizer
     train_ds = DistillDataset(tokenizer, sents, embs)
-    sents, embs = joblib.load(Path(cache_folder) / "allnli_valid.jbl")
+    sents, embs = joblib.load(Path(cache_folder) / f"{dataset.value}_valid.jbl")
     valid_ds = DistillDataset(tokenizer, sents, embs)
+    print(len(train_ds), len(valid_ds))
     del sents
     del embs
     train_loader = DataLoader(
@@ -119,7 +121,7 @@ def main(
         # amp_backend="apex", amp_level='O2',
         precision=16 if config.fp16 else 32,
         gpus=1,
-        val_check_interval=0.5,
+        val_check_interval=0.5 if dataset is SBertDataset.AllNLI else 1.,
         gradient_clip_val=10,
         max_epochs=epochs,
         # max_steps=steps,
@@ -138,7 +140,7 @@ def main(
 
     pl_module.load_state_dict(torch.load(checkpoints.best_model_path)["state_dict"])
 
-    output_folder = CACHE_DIR / f"{encoder[0].__class__.__name__}_distilled"
+    output_folder = CACHE_DIR / f"{encoder[0].transformer.__class__.__name__}_distilled"
     encoder.save(str(output_folder))
 
 
