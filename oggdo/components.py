@@ -8,7 +8,8 @@ from torch import nn
 import numpy as np
 from transformers import (
     BertModel, BertConfig, AutoTokenizer, AutoConfig, AutoModel, BertTokenizerFast,
-    ElectraConfig, ElectraModel, ElectraTokenizerFast, DistilBertModel
+    ElectraConfig, ElectraModel, ElectraTokenizerFast, DistilBertModel,
+    RobertaConfig, RobertaTokenizerFast, RobertaModel
 )
 
 
@@ -45,6 +46,10 @@ class TransformerWrapper(nn.Module):
                 model_cls = ElectraModel
                 config_cls = ElectraConfig
                 tokenizer_cls = ElectraTokenizerFast
+            elif model_type == "roberta":
+                model_cls = RobertaModel
+                config_cls = RobertaConfig
+                tokenizer_cls = RobertaTokenizerFast
             else:
                 raise ValueError(f"{model_type} is not supported!")
 
@@ -75,7 +80,7 @@ class TransformerWrapper(nn.Module):
             output = self.transformer(
                 input_ids=features['input_ids'],
                 attention_mask=features['input_mask'],
-                token_type_ids=features.get('token_type_ids', torch.ones_like(features['input_mask']).long())
+                token_type_ids=features.get('token_type_ids', torch.zeros_like(features['input_mask']).long())
             )
         features.update({
             'hidden_states': output["hidden_states"],
@@ -266,12 +271,15 @@ class PoolingLayer(nn.Module):
                  pooling_mode_max_tokens: bool = False,
                  pooling_mode_mean_tokens: bool = True,
                  pooling_mode_mean_sqrt_len_tokens: bool = False,
-                 layer_to_use: int = -1
+                 layer_to_use: int = -1,
+                 expand_to_dimension: int = -1
                  ):
         super().__init__()
 
         self.config_keys = ['word_embedding_dimension',  'pooling_mode_cls_token',
-                            'pooling_mode_mean_tokens', 'pooling_mode_max_tokens', 'pooling_mode_mean_sqrt_len_tokens']
+                            'pooling_mode_mean_tokens', 'pooling_mode_max_tokens',
+                            'pooling_mode_mean_sqrt_len_tokens',
+                            'expand_to_dimension']
 
         self.word_embedding_dimension = word_embedding_dimension
         self.pooling_mode_cls_token = pooling_mode_cls_token
@@ -279,6 +287,8 @@ class PoolingLayer(nn.Module):
         self.pooling_mode_max_tokens = pooling_mode_max_tokens
         self.pooling_mode_mean_sqrt_len_tokens = pooling_mode_mean_sqrt_len_tokens
         self.layer_to_use = layer_to_use
+        self.expand_to_dimension = expand_to_dimension
+        self.linear_proj = None
 
         pooling_mode_multiplier = sum([
             pooling_mode_cls_token, pooling_mode_max_tokens,
@@ -286,6 +296,13 @@ class PoolingLayer(nn.Module):
         ])
         self.pooling_output_dimension = (
             pooling_mode_multiplier * word_embedding_dimension)
+
+        if expand_to_dimension > 0 and self.pooling_output_dimension != expand_to_dimension:
+            self.linear_proj = nn.Linear(
+                self.pooling_output_dimension,
+                expand_to_dimension,
+                bias=False
+            )
 
     def forward(self, features: Dict[str, torch.Tensor]):
         token_embeddings = features['hidden_states'][self.layer_to_use]
@@ -322,6 +339,8 @@ class PoolingLayer(nn.Module):
                 output_vectors.append(sum_embeddings / torch.sqrt(sum_mask))
 
         output_vector = torch.cat(output_vectors, 1)
+        if self.linear_proj:
+            output_vector = self.linear_proj(output_vector)
         features.update({'sentence_embeddings': output_vector})
         return features
 

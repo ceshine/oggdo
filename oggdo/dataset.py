@@ -1,9 +1,13 @@
+import os
+import enum
 from pathlib import Path
 from typing import Optional
 
 import joblib
+import requests
 import numpy as np
 import pandas as pd
+from tqdm import tqdm
 from torch.utils.data import Dataset
 
 
@@ -148,7 +152,6 @@ class NewsClassificationDataset(Dataset):
 class NewsSimilarityDataset(Dataset):
     def __init__(
             self, tokenizer, df):
-        # politics
         self.labels = df.similarity.values
         self.text_1 = np.asarray([
             tokenizer.encode(text, add_special_tokens=False)
@@ -158,6 +161,32 @@ class NewsSimilarityDataset(Dataset):
             tokenizer.encode(text, add_special_tokens=False)
             for text in df.text_2.values
         ])
+
+    def __getitem__(self, item):
+        return (
+            self.text_1[item],
+            self.text_2[item],
+            self.labels[item].astype(np.float32)
+        )
+
+    def __len__(self):
+        return len(self.labels)
+
+
+class SimilarityDataset(Dataset):
+    def __init__(
+        self, tokenizer, df,
+        sentence_1: str = "text_1",
+        sentence_2: str = "text_2",
+        label: str = "similarity"
+    ):
+        self.labels = df[label].values
+        self.text_1 = tokenizer.batch_encode_plus(
+            df[sentence_1].values.tolist(), add_special_tokens=False, padding=False
+        )["input_ids"]
+        self.text_2 = tokenizer.batch_encode_plus(
+            df[sentence_2].values.tolist(), add_special_tokens=False, padding=False
+        )["input_ids"]
 
     def __getitem__(self, item):
         return (
@@ -182,3 +211,85 @@ class SentenceDataset(Dataset):
 
     def __len__(self):
         return len(self.text)
+
+
+class DistillDataset(Dataset):
+    def __init__(self, tokenizer, sentences, embeddings):
+        self.text = tokenizer.batch_encode_plus(
+            sentences, add_special_tokens=False, padding=False
+        )["input_ids"]
+        self.embeddings = embeddings
+
+    def __getitem__(self, item):
+        return self.text[item], self.embeddings[item]
+
+    def __len__(self):
+        return len(self.text)
+
+
+class SBertDataset(enum.Enum):
+    AllNLI: str = "allnli"
+    Wikipedia: str = "wiki"
+    STS: str = "sts"
+
+
+def http_get(url, path):
+    """
+    Downloads a URL to a given path on disc
+    """
+    if os.path.dirname(path) != '':
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+
+    req = requests.get(url, stream=True)
+    if req.status_code != 200:
+        print("Exception when trying to download {}. Response {}".format(url, req.status_code), file=sys.stderr)
+        req.raise_for_status()
+        return
+
+    download_filepath = path+"_part"
+    with open(download_filepath, "wb") as file_binary:
+        content_length = req.headers.get('Content-Length')
+        total = int(content_length) if content_length is not None else None
+        progress = tqdm(unit="B", total=total, unit_scale=True)
+        for chunk in req.iter_content(chunk_size=1024):
+            if chunk:  # filter out keep-alive new chunks
+                progress.update(len(chunk))
+                file_binary.write(chunk)
+
+    os.rename(download_filepath, path)
+    progress.close()
+
+
+def download_dataset(output_dir: str = "data/", dataset: SBertDataset = SBertDataset.AllNLI) -> Path:
+    """Download dataset archives from sbert.net
+
+    Reference: https://github.com/UKPLab/sentence-transformers/blob/7a2c6905d083471ea3ce3850c13bf7ebb604a053/sentence_transformers/util.py
+    """
+    output_path = Path(output_dir)
+
+    # Download datasets if needed
+    if dataset == SBertDataset.AllNLI:
+        allnli_path = output_path / "AllNLI.tsv.gz"
+        if not allnli_path.exists():
+            http_get(
+                'https://sbert.net/datasets/AllNLI.tsv.gz',
+                str(allnli_path))
+        return allnli_path
+
+    if dataset == SBertDataset.Wikipedia:
+        wikipedia_path = output_path / "wikipedia-en-sentences.txt.gz"
+        if not wikipedia_path.exists():
+            http_get(
+                'https://sbert.net/datasets/wikipedia-en-sentences.txt.gz',
+                str(wikipedia_path))
+        return wikipedia_path
+
+    if dataset == SBertDataset.STS:
+        sts_path = output_path / "stsbenchmark.tsv.gz"
+        if not sts_path.exists():
+            http_get(
+                'https://sbert.net/datasets/stsbenchmark.tsv.gz',
+                str(sts_path))
+        return sts_path
+
+    raise ValueError("Unknown dataset!")
