@@ -208,6 +208,121 @@ class NliModule(SentenceEncodingModule):
         }
 
 
+class DistillModule(SentenceEncodingModule):
+    """Get sentence embeddings and attentions from the teacher model in real-time
+    """
+
+    def __init__(
+        self, config: BaseConfig,
+        teacher_model: torch.nn.Module,
+        student_model: torch.nn.Module,
+        metrics: Sequence[Tuple[str, pl.metrics.Metric]] = (),
+        layerwise_decay: float = 0,
+        attn_loss_weight: float = 1.
+    ):
+        super().__init__(
+            config, student_model, metrics, layerwise_decay
+        )
+        self.teacher_model = teacher_model.eval()
+        self.train_attn_loss_tracker = pls.utils.EMATracker(0.05)
+        self.attn_loss_weight = attn_loss_weight
+
+    def forward(self, features: Sequence[Dict[str, torch.Tensor]]):
+        with torch.no_grad():
+            teacher_output = self.teacher_model(features[0])
+        student_output = self.model(features[1])
+        return teacher_output, student_output
+
+    def _get_losses(self, batch, teacher_output, student_output):
+        emb_loss = self.config.loss_fn(
+            student_output["sentence_embeddings"],
+            teacher_output["sentence_embeddings"].detach()
+        )
+        assert (
+            teacher_output["attentions"].shape[1] %
+            student_output["attentions"].shape[1] == 0)
+        div = teacher_output["attentions"].shape[1] / student_output["attentions"].shape[1]
+        student_attn = student_output["attentions"]
+        student_attn = torch.where(
+            student_attn <= -1e2,
+            torch.zeros_like(student_attn).to(student_attn.device),
+            student_attn
+        )
+        teacher_attn = torch.stack(
+            [
+                teacher_output["attentions"][:, i].detach()
+                for i in range(teacher_output["attentions"].shape[1])
+                if i % div == 0
+            ],
+            dim=1
+        )
+        teacher_attn = torch.where(
+            teacher_attn <= -1e2,
+            torch.zeros_like(teacher_attn).to(teacher_attn.device),
+            teacher_attn
+        )
+        attn_loss = self.config.loss_fn(
+            student_attn,
+            teacher_attn
+        ) * torch.numel(batch[0]['input_mask']) / batch[0]['input_mask'].sum()
+        return emb_loss, attn_loss
+
+    def validation_step(self, batch, batch_idx):
+        teacher_output, student_output = self.forward(batch)
+        emb_loss, attn_loss = self._get_losses(batch, teacher_output, student_output)
+        loss = emb_loss + attn_loss * self.attn_loss_weight
+        return {
+            'loss': loss,
+            'emb_loss': emb_loss,
+            'attn_loss': attn_loss,
+            'pred': student_output["sentence_embeddings"],
+            'target': teacher_output["sentence_embeddings"]
+        }
+
+    def training_step(self, batch, batch_idx):
+        teacher_output, student_output = self.forward(batch)
+        emb_loss, attn_loss = self._get_losses(batch, teacher_output, student_output)
+        loss = emb_loss + attn_loss
+        return {
+            "loss": loss,
+            'emb_loss': emb_loss,
+            'attn_loss': attn_loss,
+            "log": batch_idx % self.trainer.accumulate_grad_batches == 0
+        }
+
+    def training_step_end(self, outputs):
+        """Requires training_step() to return a dictionary with a "loss" entry."""
+        self.train_loss_tracker.update(outputs["loss"].detach())
+        self.train_attn_loss_tracker.update(outputs["attn_loss"].detach())
+        if self._should_log(outputs["log"]):
+            self.logger.log_metrics({
+                "train_loss": self.train_loss_tracker.value,
+                "train_attn_loss": self.train_attn_loss_tracker.value
+            }, step=self.global_step)
+        self.log(
+            "attn_loss",
+            self.train_attn_loss_tracker.value * self.attn_loss_weight,
+            prog_bar=True, on_step=True)
+        return outputs["loss"]
+
+    def validation_step_end(self, outputs):
+        """Requires validation_step() to return a dictionary with the following entries:
+
+            1. val_loss
+            2. pred
+            3. target
+        """
+        self.log('val_loss', outputs['loss'].mean())
+        self.log('val_attn_loss', outputs['attn_loss'].mean())
+        self.log('val_emb_loss', outputs['emb_loss'].mean())
+        for name, metric in self.metrics:
+            metric(
+                outputs['pred'].view(-1).cpu(),
+                outputs['target'].view(-1).cpu()
+            )
+            self.log("val_" + name, metric)
+
+
 class SentencePairDataModule(pl.LightningDataModule):
     def __init__(
         self,

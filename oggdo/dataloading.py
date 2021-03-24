@@ -1,4 +1,4 @@
-from typing import Tuple, Dict, Optional
+from typing import Tuple, Dict, Optional, List
 
 import numpy as np
 import torch
@@ -105,6 +105,42 @@ def collate_singles(
         },
         labels
     )
+
+
+def collate_distill(
+    batch, pad, opening_id, closing_id, truncate_length
+) -> List[Dict[str, torch.Tensor]]:
+    if isinstance(batch[0], list):
+        transposed = [
+            batch,
+            [None] * len(batch)
+        ]
+    else:
+        transposed = list(zip(*batch))
+    max_len = min(
+        max((len(x) for x in transposed[0])) + 2,
+        truncate_length
+    )
+    results = []
+    for i in range(2):
+        tokens = np.zeros((len(batch), max_len), dtype=np.int64) + pad
+        tokens[:, 0] = opening_id
+        for j, row in enumerate(transposed[i]):
+            row = row[:max_len-2]
+            tokens[j, 1:len(row)+1] = row
+            tokens[j, len(row)+1] = closing_id
+        assert (
+            np.sum(tokens == closing_id) == len(batch)), \
+            f"{np.sum(tokens == closing_id)}, {len(batch)}"
+        token_tensor = torch.from_numpy(tokens)
+        mask_tensor = (token_tensor != pad).float()
+        results.append(
+            {
+                "input_ids": token_tensor,
+                "input_mask": mask_tensor,
+            }
+        )
+    return results
 
 
 def collate_pairs(

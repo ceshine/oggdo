@@ -201,16 +201,40 @@ class SimilarityDataset(Dataset):
 
 class SentenceDataset(Dataset):
     def __init__(self, tokenizer, sentences):
-        self.text = [
-            tokenizer.encode(text, add_special_tokens=False)
-            for text in sentences
-        ]
+        self.text = tokenizer.batch_encode_plus(
+            sentences, add_special_tokens=False, padding=False
+        )["input_ids"]
 
     def __getitem__(self, item):
         return self.text[item]
 
     def __len__(self):
         return len(self.text)
+
+
+class DistillSentenceDataset(Dataset):
+    def __init__(self, tokenizer_1, tokenizer_2, sentences):
+        self.text_1 = tokenizer_1.batch_encode_plus(
+            sentences, add_special_tokens=False, padding=False
+        )["input_ids"]
+        self.text_2 = tokenizer_2.batch_encode_plus(
+            sentences, add_special_tokens=False, padding=False
+        )["input_ids"]
+        print("Original dataset size:", len(self.text_1))
+        matched = [
+            len(x[0]) == len(x[1])
+            for x in zip(self.text_1, self.text_2)
+        ]
+        print("Filtered dataset size:", np.sum(matched))
+        if np.sum(matched) != len(self.text_1):
+            self.text_1 = [x for i, x in enumerate(self.text_1) if matched[i]]
+            self.text_2 = [x for i, x in enumerate(self.text_2) if matched[i]]
+
+    def __getitem__(self, item):
+        return self.text_1[item], self.text_2[item]
+
+    def __len__(self):
+        return len(self.text_1)
 
 
 class DistillDataset(Dataset):
