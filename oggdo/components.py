@@ -21,10 +21,11 @@ class TransformerWrapper(nn.Module):
 
     def __init__(
             self, model_name_or_path: str, max_seq_length: int = 128, do_lower_case: bool = True,
-            model_type: Optional[str] = None):
+            model_type: Optional[str] = None, attentions: bool = False):
         super().__init__()
         self.config_keys = ['max_seq_length', 'do_lower_case']
         self.do_lower_case = do_lower_case
+        self.attentions = attentions
 
         # TODO: maybe do this checking via the config file?
         # if max_seq_length > 510:
@@ -74,16 +75,19 @@ class TransformerWrapper(nn.Module):
         if isinstance(self.transformer, DistilBertModel):
             output = self.transformer(
                 input_ids=features['input_ids'],
-                attention_mask=features['input_mask']
+                attention_mask=features['input_mask'],
+                output_attentions=self.attentions
             )
         else:
             output = self.transformer(
                 input_ids=features['input_ids'],
                 attention_mask=features['input_mask'],
-                token_type_ids=features.get('token_type_ids', torch.zeros_like(features['input_mask']).long())
+                token_type_ids=features.get('token_type_ids', torch.zeros_like(features['input_mask']).long()),
+                output_attentions=self.attentions
             )
         features.update({
             'hidden_states': output["hidden_states"],
+            'attentions': torch.stack(output["attentions"]) if self.attentions else None
             # 'input_mask': features['input_mask'] # No point in this line? (ceshine)
         })
         return features

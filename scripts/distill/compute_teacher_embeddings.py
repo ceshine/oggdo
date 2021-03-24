@@ -1,4 +1,5 @@
 import os
+import random
 
 from pathlib import Path
 from functools import partial
@@ -20,13 +21,20 @@ os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 def main(
     dataset: SBertDataset, model_path: str, output_folder: str = "cache/teacher_embs/",
-    batch_size: int = 32, workers: int = 2
+    batch_size: int = 32, workers: int = 2, attentions: bool = False, sample: float = -1
 ):
-    # this is designed for stsb-roberta-base; some changes might needed for other models
+    # this is designed for stsb-roberta-base; some changes might be needed for other models
     encoder = load_encoder(model_path, None, 256, do_lower_case=True, mean_pooling=True).cuda().eval()
+    encoder[0].attentions = attentions
     train, valid, test = get_splits("data/", dataset)
     Path(output_folder).mkdir(exist_ok=True, parents=True)
     for name, sentences in (("train", train), ("valid", valid), ("test", test)):
+        if name == "train" and sample > 0 and sample < 1:
+            np.random.seed(42)
+            sentences = np.random.choice(
+                sentences, size=round(len(sentences) * sample),
+                replace=False
+            )
         ds = SentenceDataset(encoder[0].tokenizer, sentences)
         sampler = SortSampler(
             ds,
@@ -49,9 +57,13 @@ def main(
         with torch.no_grad():
             buffer = []
             for batch, _ in tqdm(loader, ncols=100):
-                buffer.append(encoder(
+                outputs = encoder(
                     features_to_device(batch, torch.device("cuda"))
-                )["sentence_embeddings"].detach().cpu().numpy())
+                )
+                buffer.append((
+                    x.detach().cpu().numpy() if x is not None else None
+                    for x in (outputs["sentence_embeddings"], outputs["attentions"])
+                ))
         embs = np.concatenate(buffer)
         embs = embs[np.argsort(list(iter(sampler)))]
         joblib.dump([sentences, embs], Path(output_folder) / (dataset.value + "_" + name + ".jbl"))
