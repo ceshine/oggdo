@@ -87,7 +87,8 @@ class TransformerWrapper(nn.Module):
             )
         features.update({
             'hidden_states': output["hidden_states"],
-            'attentions': torch.stack(output["attentions"]) if self.attentions else None
+            # attention shape: batch_size x layers x head x seqlen x seqlen
+            'attentions': torch.stack(output["attentions"], dim=1) if self.attentions else None
             # 'input_mask': features['input_mask'] # No point in this line? (ceshine)
         })
         return features

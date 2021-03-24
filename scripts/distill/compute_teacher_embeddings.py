@@ -1,5 +1,6 @@
 import os
 import random
+from itertools import chain
 
 from pathlib import Path
 from functools import partial
@@ -21,7 +22,8 @@ os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 def main(
     dataset: SBertDataset, model_path: str, output_folder: str = "cache/teacher_embs/",
-    batch_size: int = 32, workers: int = 2, attentions: bool = False, sample: float = -1
+    batch_size: int = 32, workers: int = 2, attentions: bool = False, sample: float = -1,
+    no_train: bool = False
 ):
     # this is designed for stsb-roberta-base; some changes might be needed for other models
     encoder = load_encoder(model_path, None, 256, do_lower_case=True, mean_pooling=True).cuda().eval()
@@ -35,6 +37,8 @@ def main(
                 sentences, size=round(len(sentences) * sample),
                 replace=False
             )
+        if name == "train" and no_train:
+            continue
         ds = SentenceDataset(encoder[0].tokenizer, sentences)
         sampler = SortSampler(
             ds,
@@ -60,13 +64,19 @@ def main(
                 outputs = encoder(
                     features_to_device(batch, torch.device("cuda"))
                 )
-                buffer.append((
+                buffer.append([
                     x.detach().cpu().numpy() if x is not None else None
                     for x in (outputs["sentence_embeddings"], outputs["attentions"])
-                ))
-        embs = np.concatenate(buffer)
-        embs = embs[np.argsort(list(iter(sampler)))]
-        joblib.dump([sentences, embs], Path(output_folder) / (dataset.value + "_" + name + ".jbl"))
+                ])
+        reorder_index = np.argsort(list(iter(sampler)))
+        embs = np.concatenate([x[0] for x in buffer])[reorder_index]
+        if buffer[0][1] is None:
+            attns = None
+        else:
+            attns = list(chain.from_iterable((list(x[1]) for x in buffer)))
+            attns = [attns[i] for i in reorder_index]
+        joblib.dump([sentences, embs, attns], Path(output_folder) / (dataset.value + "_" + name + ".jbl"))
+        del attns, embs
 
 
 if __name__ == "__main__":

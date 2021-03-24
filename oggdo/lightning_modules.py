@@ -60,7 +60,7 @@ class CosineSimilarityConfig(BaseConfig):
     linear_transform: bool = False
 
 
-class SentenceEncoderModule(pls.BaseModule):
+class SentenceEncodingModule(pls.BaseModule):
     def __init__(
         self, config: BaseConfig, model: torch.nn.Module,
         metrics: Sequence[Tuple[str, pl.metrics.Metric]] = (
@@ -192,7 +192,7 @@ class SentenceEncoderModule(pls.BaseModule):
         }
 
 
-class NliModule(SentenceEncoderModule):
+class NliModule(SentenceEncodingModule):
     """Returns predicted labels instead of raw values when validating"""
 
     def validation_step(self, batch, batch_idx):

@@ -13,7 +13,7 @@ from oggdo.dataset import NewsSimilarityDataset
 from oggdo.components import TransformerWrapper, PoolingLayer
 from oggdo.encoder import SentenceEncoder
 from oggdo.models import SentencePairCosineSimilarity
-from oggdo.lightning_modules import CosineSimilarityConfig, SimilarityModule, SentencePairDataModule
+from oggdo.lightning_modules import CosineSimilarityConfig, SentenceEncodingModule, SentencePairDataModule
 
 CACHE_DIR = Path('./cache/')
 CACHE_DIR.mkdir(exist_ok=True, parents=True)
@@ -84,7 +84,7 @@ def main(
         layerwise_decay=layerwise_decay
     )
 
-    pl_module = SimilarityModule(
+    pl_module = SentenceEncodingModule(
         config, model,
         layerwise_decay=config.layerwise_decay)
 

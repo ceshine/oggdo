@@ -11,7 +11,7 @@ import pytorch_lightning_spells as pls
 from torch.utils.data import DataLoader
 from oggdo.dataset import DistillDataset, SBertDataset
 from oggdo.dataloading import SortSampler, SortishSampler, collate_singles
-from oggdo.lightning_modules import BaseConfig, SentenceEncoderModule
+from oggdo.lightning_modules import BaseConfig, SentenceEncodingModule
 
 from common import load_encoder
 
@@ -52,14 +52,14 @@ def main(
         layerwise_decay=layerwise_decay
     )
 
-    sents, embs = joblib.load(Path(cache_folder) / f"{dataset.value}_train.jbl")
+    sents, embs, attns = joblib.load(Path(cache_folder) / f"{dataset.value}_train.jbl")
     encoder = load_encoder(
         model_path, None, 256, do_lower_case=True,
         mean_pooling=True, expand_to_dimension=embs.shape[1])
     # print(encoder)
     tokenizer = encoder[0].tokenizer
     train_ds = DistillDataset(tokenizer, sents, embs)
-    sents, embs = joblib.load(Path(cache_folder) / f"{dataset.value}_valid.jbl")
+    sents, embs, attns = joblib.load(Path(cache_folder) / f"{dataset.value}_valid.jbl")
     valid_ds = DistillDataset(tokenizer, sents, embs)
     print(len(train_ds), len(valid_ds))
     del sents
@@ -98,7 +98,7 @@ def main(
         num_workers=1
     )
 
-    pl_module = SentenceEncoderModule(
+    pl_module = SentenceEncodingModule(
         config, EncoderWrapper(encoder), metrics=(),
         layerwise_decay=config.layerwise_decay
     )
