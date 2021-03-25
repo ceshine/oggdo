@@ -252,7 +252,7 @@ class DistillModule(SentenceEncodingModule):
             [
                 teacher_output["attentions"][:, i].detach()
                 for i in range(teacher_output["attentions"].shape[1])
-                if i % div == 0
+                if i % div == (div-1)
             ],
             dim=1
         )
