@@ -282,7 +282,7 @@ class DistillModule(SentenceEncodingModule):
     def training_step(self, batch, batch_idx):
         teacher_output, student_output = self.forward(batch)
         emb_loss, attn_loss = self._get_losses(batch, teacher_output, student_output)
-        loss = emb_loss + attn_loss
+        loss = emb_loss + attn_loss * self.attn_loss_weight
         return {
             "loss": loss,
             'emb_loss': emb_loss,
