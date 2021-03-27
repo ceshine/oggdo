@@ -10,15 +10,15 @@ import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
 from torch.optim.lr_scheduler import CosineAnnealingLR
-from helperbot import (
+from pytorch_helper_bot import (
     BaseBot, LearningRateSchedulerCallback,
     MovingAverageStatsTrackerCallback,
     CheckpointCallback,
     MultiStageScheduler, LinearLR,
     AdamW
 )
-from helperbot.metrics import BinaryAccuracy, AUC
-from helperbot.callbacks import Callback
+from pytorch_helper_bot.metrics import BinaryAccuracy, AUC
+from pytorch_helper_bot.callbacks import Callback
 
 from oggdo.dataset import LcqmcDataset
 from oggdo.dataloading import SortSampler, SortishSampler, collate_pairs

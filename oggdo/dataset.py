@@ -60,14 +60,17 @@ class XnliDfDataset(Dataset):
             self,
             tokenizer,
             df):
-        self.text_1 = np.asarray([
-            tokenizer.encode(text, add_special_tokens=False)
-            for text in df.premise.values
-        ])
-        self.text_2 = np.asarray([
-            tokenizer.encode(text, add_special_tokens=False)
-            for text in df.hypo.values
-        ])
+        if "text1" in df:
+            df.rename(columns={
+                "text1": "premise",
+                "text2": "hypo"
+            }, inplace=True)
+        self.text_1 = tokenizer.batch_encode_plus(
+            df.premise.values.tolist(), add_special_tokens=False, padding=False
+        )["input_ids"]
+        self.text_2 = tokenizer.batch_encode_plus(
+            df.hypo.values.tolist(), add_special_tokens=False, padding=False
+        )["input_ids"]
         self.labels = df["labels"].values
 
     def __getitem__(self, item):

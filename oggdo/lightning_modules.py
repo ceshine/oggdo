@@ -1,9 +1,13 @@
+import csv
 import math
+import gzip
 import warnings
 from pathlib import Path
 from functools import partial
 from dataclasses import dataclass, asdict
-from typing import Sequence, Callable, Type, Tuple, Dict, Optional
+from typing import (
+    Sequence, Callable, Type, Tuple, Dict, Optional, Iterable, Any, List
+)
 
 import torch
 import joblib
@@ -17,7 +21,7 @@ from sklearn.model_selection import StratifiedShuffleSplit
 
 from .components import TransformerWrapper
 from .dataloading import collate_pairs
-from .dataset import SBertDataset
+from .dataset import SBertDataset, download_dataset
 
 T2S = OpenCC('t2s')
 NO_DECAY = [
@@ -80,7 +84,6 @@ class SentenceEncodingModule(pls.BaseModule):
             '"layerwise_decay" is deprecated. Use config.layerwise_decay instead.',
             DeprecationWarning
         )
-        print("layerwise_decay parameter ")
         super().__init__()
         self.config = config
         self.save_hyperparameters(asdict(config))
@@ -485,3 +488,69 @@ class SentencePairDataModule(pl.LightningDataModule):
 
     def transfer_batch_to_device(self, batch, device):
         return super().transfer_batch_to_device(batch, device)
+
+
+def _get_splits(
+    data_folder: str = "data/", dataset: SBertDataset = SBertDataset.AllNLI
+) -> Iterable[List[Tuple[str, str, Any]]]:
+    """Split the dataset downloaded from sbert.net for sentence pair regression or classification.
+
+    Args:
+        data_folder (str, optional): Where the data lives. Defaults to "data/".
+        dataset (SBertDataset, optional): the SBert dataset. Defaults to SBertDataset.AllNLI.
+
+    Returns:
+        Iterable[List[Tuple[str, str, Any]]]: the rows from train, valid, and test datasets.
+    """
+    data_path = download_dataset(data_folder, dataset)
+    train: List[Tuple[str, str, Any]] = []
+    valid: List[Tuple[str, str, Any]] = []
+    test: List[Tuple[str, str, Any]] = []
+    if dataset is SBertDataset.AllNLI:
+        target_column = "label"
+    elif dataset is SBertDataset.STS:
+        target_column = "score"
+    else:
+        raise ValueError("Only supports AllNLI and STS now.")
+    with gzip.open(data_path, 'rt', encoding='utf8') as fIn:
+        reader = csv.DictReader(fIn, delimiter='\t', quoting=csv.QUOTE_NONE)
+        for row in reader:
+            if row['split'] == 'train':
+                target = train
+            elif row['split'] == 'dev':
+                target = valid
+            else:
+                target = test
+            target.append((row["sentence1"], row["sentence2"], row[target_column]))
+    return (list(x) for x in (train, valid, test))
+
+
+class SBertSentencePairDataModule(SentencePairDataModule):
+    def __init__(
+        self,
+        dataset: SBertDataset,
+        embedder: TransformerWrapper,
+        config: BaseConfig,
+        dataset_cls: Type[torch.utils.data.Dataset],
+        workers: int = 4,
+        cache_dir: Optional[str] = "cache/tokenized/",
+        name: str = ""
+    ):
+        super().__init__(embedder, config, dataset_cls, workers, cache_dir, name)
+        self.dataset = dataset
+        if not name:
+            name = dataset.value
+
+    def _get_splitted_data(self):
+        datasets = _get_splits(self.data_path, self.dataset) # train, valid, test
+        results = []
+        for rows in datasets:
+            df = pd.DataFrame(rows, columns=["text1", "text2", "labels"])
+            if "neutral" in set(df.labels.values):
+                # encode the NLI labels
+                new_labels = np.zeros(df.labels.shape[0], dtype=np.int64)
+                new_labels[df.labels == "neutral"] = 1
+                new_labels[df.labels == "entailment"] = 2
+                df["labels"] = new_labels
+            results.append(df)
+        return results

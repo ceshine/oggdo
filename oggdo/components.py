@@ -9,7 +9,8 @@ import numpy as np
 from transformers import (
     BertModel, BertConfig, AutoTokenizer, AutoConfig, AutoModel, BertTokenizerFast,
     ElectraConfig, ElectraModel, ElectraTokenizerFast, DistilBertModel,
-    RobertaConfig, RobertaTokenizerFast, RobertaModel
+    RobertaConfig, RobertaTokenizerFast, RobertaModel,
+    DebertaConfig, DebertaTokenizer, DebertaModel
 )
 
 
@@ -51,6 +52,10 @@ class TransformerWrapper(nn.Module):
                 model_cls = RobertaModel
                 config_cls = RobertaConfig
                 tokenizer_cls = RobertaTokenizerFast
+            elif model_type == "deberta":
+                model_cls = DebertaModel
+                config_cls = DebertaConfig
+                tokenizer_cls = DebertaTokenizer
             else:
                 raise ValueError(f"{model_type} is not supported!")
 

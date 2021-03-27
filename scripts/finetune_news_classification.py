@@ -13,15 +13,15 @@ from torch.utils.data import DataLoader
 from torch.optim.lr_scheduler import CosineAnnealingLR
 from sklearn.model_selection import StratifiedShuffleSplit
 from sklearn.metrics import confusion_matrix
-from helperbot import (
+from pytorch_helper_bot import (
     BaseBot, LearningRateSchedulerCallback,
     MovingAverageStatsTrackerCallback,
     CheckpointCallback,
     MultiStageScheduler, LinearLR,
     AdamW
 )
-from helperbot.metrics import Top1Accuracy
-from helperbot.callbacks import Callback
+from pytorch_helper_bot.metrics import Top1Accuracy
+from pytorch_helper_bot.callbacks import Callback
 
 from oggdo.dataset import NewsClassificationDataset
 from oggdo.dataloading import SortSampler, SortishSampler, collate_singles
