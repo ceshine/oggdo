@@ -11,7 +11,7 @@ import pytorch_lightning_spells as pls
 from torch.utils.data import DataLoader
 from oggdo.dataset import SBertDataset, DistillSentenceDataset
 from oggdo.dataloading import SortSampler, SortishSampler, collate_distill
-from oggdo.lightning_modules import BaseConfig, DistillModule
+from oggdo.lightning_modules import DistillConfig, DistillModule
 from common import load_encoder, get_splits
 
 
@@ -60,12 +60,14 @@ def main(
     batch_size: int = 32,
     fp16: bool = False, workers: int = 2, grad_accu: int = 1,
     lr: float = 3e-5, epochs: int = 2, wd: float = 0,
-    layerwise_decay: bool = False
+    layerwise_decay: bool = False, attn_loss_weight: float = 1.
 ):
     pl.seed_everything(int(os.environ.get("SEED", 42)))
 
-    config = BaseConfig(
+    config = DistillConfig(
         model_path=student_model_path,
+        teacher_model_path=teacher_model_path,
+        dataset=dataset,
         data_path="",
         batch_size=batch_size,
         grad_accu=grad_accu,
@@ -74,7 +76,8 @@ def main(
         # optimizer_cls=pls.optimizers.RAdam,
         optimizer_cls=torch.optim.AdamW,
         weight_decay=wd,
-        layerwise_decay=layerwise_decay
+        layerwise_decay=layerwise_decay,
+        attn_loss_weight=attn_loss_weight
     )
 
     teacher_encoder, student_encoder, train_ds, valid_ds = get_datasets(
@@ -120,9 +123,7 @@ def main(
     )
 
     pl_module = DistillModule(
-        config, teacher_encoder, student_encoder, metrics=(),
-        layerwise_decay=config.layerwise_decay,
-        attn_loss_weight=2.
+        config, teacher_encoder, student_encoder, metrics=()
     )
 
     checkpoints = pl.callbacks.ModelCheckpoint(
@@ -138,6 +139,12 @@ def main(
         pl.callbacks.LearningRateMonitor(logging_interval='step'),
     ]
 
+    loggers = [
+        pl.loggers.TensorBoardLogger(str(CACHE_DIR / "tb_logs_distill"), name=""),
+        pls.loggers.ScreenLogger(),
+    ]
+    if os.environ.get("WANDB_PROJ"):
+        loggers.append(pl.loggers.WandbLogger(project=os.environ["WANDB_PROJ"]))
     trainer = pl.Trainer(
         # amp_backend="apex", amp_level='O2',
         precision=16 if config.fp16 else 32,
@@ -149,11 +156,7 @@ def main(
         callbacks=callbacks,
         accumulate_grad_batches=config.grad_accu,
         # auto_scale_batch_size='power' if batch_size is None else None,
-        logger=[
-            # pl.loggers.TensorBoardLogger(str(CACHE_DIR / "tb_logs"), name=""),
-            pls.loggers.ScreenLogger(),
-            # pl.loggers.WandbLogger(project="news-similarity")
-        ],
+        logger=loggers,
         log_every_n_steps=100
     )
 

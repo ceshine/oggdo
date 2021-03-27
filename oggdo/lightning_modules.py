@@ -1,4 +1,5 @@
 import math
+import warnings
 from pathlib import Path
 from functools import partial
 from dataclasses import dataclass, asdict
@@ -16,6 +17,7 @@ from sklearn.model_selection import StratifiedShuffleSplit
 
 from .components import TransformerWrapper
 from .dataloading import collate_pairs
+from .dataset import SBertDataset
 
 T2S = OpenCC('t2s')
 NO_DECAY = [
@@ -60,6 +62,13 @@ class CosineSimilarityConfig(BaseConfig):
     linear_transform: bool = False
 
 
+@dataclass
+class DistillConfig(BaseConfig):
+    teacher_model_path: str = ""
+    dataset: SBertDataset = SBertDataset.AllNLI
+    attn_loss_weight: float = 1.
+
+
 class SentenceEncodingModule(pls.BaseModule):
     def __init__(
         self, config: BaseConfig, model: torch.nn.Module,
@@ -67,12 +76,17 @@ class SentenceEncodingModule(pls.BaseModule):
             ("spearman", pls.metrics.SpearmanCorrelation(sigmoid=False)),
         ), layerwise_decay: float = 0
     ):
+        warnings.warn(
+            '"layerwise_decay" is deprecated. Use config.layerwise_decay instead.',
+            DeprecationWarning
+        )
+        print("layerwise_decay parameter ")
         super().__init__()
         self.config = config
         self.save_hyperparameters(asdict(config))
         self.model = model
         self.metrics = metrics
-        self.layerwise_decay = layerwise_decay
+        self.layerwise_decay = self.config.layerwise_decay
 
     def forward(self, features: Dict[str, torch.Tensor]):
         return self.model(**features)
@@ -213,19 +227,18 @@ class DistillModule(SentenceEncodingModule):
     """
 
     def __init__(
-        self, config: BaseConfig,
+        self, config: DistillConfig,
         teacher_model: torch.nn.Module,
         student_model: torch.nn.Module,
         metrics: Sequence[Tuple[str, pl.metrics.Metric]] = (),
-        layerwise_decay: float = 0,
         attn_loss_weight: float = 1.
     ):
         super().__init__(
-            config, student_model, metrics, layerwise_decay
+            config, student_model, metrics
         )
         self.teacher_model = teacher_model.eval()
-        self.train_attn_loss_tracker = pls.utils.EMATracker(0.05)
-        self.attn_loss_weight = attn_loss_weight
+        self.train_attn_loss_tracker = pls.utils.EMATracker(0.02)
+        self.attn_loss_weight = config.attn_loss_weight
 
     def forward(self, features: Sequence[Dict[str, torch.Tensor]]):
         with torch.no_grad():
@@ -302,7 +315,7 @@ class DistillModule(SentenceEncodingModule):
         self.log(
             "attn_loss",
             self.train_attn_loss_tracker.value * self.attn_loss_weight,
-            prog_bar=True, on_step=True)
+            prog_bar=True, on_step=True, on_epoch=False)
         return outputs["loss"]
 
     def validation_step_end(self, outputs):
