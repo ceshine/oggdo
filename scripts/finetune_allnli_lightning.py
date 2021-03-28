@@ -75,21 +75,23 @@ def main(
         name="allnli"
     )
 
+    checkpoints = pl.callbacks.ModelCheckpoint(
+        dirpath=str(CACHE_DIR / "model_checkpoints"),
+        monitor='val_loss',
+        mode="min",
+        filename='{step:06d}-{val_loss:.4f}',
+        save_top_k=1,
+        save_last=False
+    )
+
     callbacks = [
-        pl.callbacks.ModelCheckpoint(
-            dirpath=str(CACHE_DIR / "model_checkpoints"),
-            monitor='val_loss',
-            mode="max",
-            filename='{step:06d}-{val_loss:.4f}',
-            save_top_k=1,
-            save_last=False
-        ),
+        checkpoints,
         pl.callbacks.LearningRateMonitor(logging_interval='step'),
     ]
 
     trainer = pl.Trainer(
         # accelerator='dp' if num_gpus > 1 else None,
-        amp_backend="apex", amp_level='O2',
+        # amp_backend="apex", amp_level='O2',
         precision=16 if config.fp16 else 32,
         gpus=1,
         val_check_interval=0.25,
@@ -109,10 +111,11 @@ def main(
 
     trainer.fit(pl_module, datamodule=data_module)
 
-    trainer.test(datamodule=data_module)
-
     output_folder = MODEL_DIR / f"allnli_{Path(model_path).name}"
     model.save(str(output_folder))
+
+    pl_module.load_state_dict(torch.load(checkpoints.best_model_path)["state_dict"])
+    trainer.test(datamodule=data_module)
 
     config_dict = asdict(config)
     del config_dict["loss_fn"]
