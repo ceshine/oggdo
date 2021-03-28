@@ -43,7 +43,7 @@ def main(
     grad_accu: int = 1,
     layerwise_decay: bool = False,
     model_type: Optional[str] = None,
-    lowercase: bool = False,
+    lowercase: bool = True,
     use_amp: bool = False,
     workers: int = 2
 ):
@@ -94,7 +94,7 @@ def main(
         # amp_backend="apex", amp_level='O2',
         precision=16 if config.fp16 else 32,
         gpus=1,
-        val_check_interval=0.25,
+        val_check_interval=0.5,
         gradient_clip_val=10,
         max_epochs=epochs,
         # max_steps=steps,
@@ -111,7 +111,7 @@ def main(
 
     trainer.fit(pl_module, datamodule=data_module)
 
-    output_folder = MODEL_DIR / f"allnli_{Path(model_path).name}"
+    output_folder = MODEL_DIR / f"allnli_{model.encoder[0].transformer.__class__.__name__}"
     model.save(str(output_folder))
 
     pl_module.load_state_dict(torch.load(checkpoints.best_model_path)["state_dict"])

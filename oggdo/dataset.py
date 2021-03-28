@@ -60,10 +60,10 @@ class XnliDfDataset(Dataset):
             self,
             tokenizer,
             df):
-        if "text1" in df:
+        if "text_1" in df:
             df.rename(columns={
-                "text1": "premise",
-                "text2": "hypo"
+                "text_1": "premise",
+                "text_2": "hypo"
             }, inplace=True)
         self.text_1 = tokenizer.batch_encode_plus(
             df.premise.values.tolist(), add_special_tokens=False, padding=False
@@ -155,15 +155,16 @@ class NewsClassificationDataset(Dataset):
 class NewsSimilarityDataset(Dataset):
     def __init__(
             self, tokenizer, df):
-        self.labels = df.similarity.values
-        self.text_1 = np.asarray([
-            tokenizer.encode(text, add_special_tokens=False)
-            for text in df.text_1.values
-        ])
-        self.text_2 = np.asarray([
-            tokenizer.encode(text, add_special_tokens=False)
-            for text in df.text_2.values
-        ])
+        if "similarity" in df:
+            self.labels = df.similarity.values
+        else:
+            self.labels = df.labels.values
+        self.text_1 = tokenizer.batch_encode_plus(
+            df.text_1.values.tolist(), add_special_tokens=False, padding=False
+        )["input_ids"]
+        self.text_2 = tokenizer.batch_encode_plus(
+            df.text_2.values.tolist(), add_special_tokens=False, padding=False
+        )["input_ids"]
 
     def __getitem__(self, item):
         return (

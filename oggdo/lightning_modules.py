@@ -369,7 +369,9 @@ class SentencePairDataModule(pl.LightningDataModule):
             if self.cache_dir:
                 cache_path = Path(self.cache_dir) / f"{self.name}_fit.cache"
                 if cache_path.exists():
-                    print("Loading cached dataset...")
+                    print("=" * 20)
+                    print("WARNING: Loading cached dataset...")
+                    print("=" * 20)
                     self.ds_train, self.ds_valid = joblib.load(
                         cache_path
                     )
@@ -542,15 +544,18 @@ class SBertSentencePairDataModule(SentencePairDataModule):
             name = dataset.value
 
     def _get_splitted_data(self):
-        datasets = _get_splits(self.data_path, self.dataset) # train, valid, test
+        datasets = _get_splits(self.data_path, self.dataset)  # train, valid, test
         results = []
         for rows in datasets:
-            df = pd.DataFrame(rows, columns=["text1", "text2", "labels"])
+            df = pd.DataFrame(rows, columns=["text_1", "text_2", "labels"])
             if "neutral" in set(df.labels.values):
                 # encode the NLI labels
                 new_labels = np.zeros(df.labels.shape[0], dtype=np.int64)
                 new_labels[df.labels == "neutral"] = 1
                 new_labels[df.labels == "entailment"] = 2
                 df["labels"] = new_labels
+            if self.dataset is SBertDataset.STS:
+                df["labels"] = df.labels.astype("float") / 5.
+                # print(df.labels.value_counts())
             results.append(df)
         return results

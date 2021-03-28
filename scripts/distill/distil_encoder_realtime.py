@@ -60,7 +60,7 @@ def main(
     batch_size: int = 32,
     fp16: bool = False, workers: int = 2, grad_accu: int = 1,
     lr: float = 3e-5, epochs: int = 2, wd: float = 0,
-    layerwise_decay: bool = False, attn_loss_weight: float = 1.
+    layerwise_decay: float = 0, attn_loss_weight: float = 1.
 ):
     pl.seed_everything(int(os.environ.get("SEED", 42)))
 

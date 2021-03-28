@@ -35,7 +35,7 @@ def main(
     cache_folder: str = "cache/teacher_embs/", batch_size: int = 32,
     fp16: bool = False, workers: int = 2, grad_accu: int = 1,
     lr: float = 3e-5, epochs: int = 2, wd: float = 0,
-    layerwise_decay: bool = False
+    layerwise_decay: float = 0
 ):
     pl.seed_everything(int(os.environ.get("SEED", 42)))
 
