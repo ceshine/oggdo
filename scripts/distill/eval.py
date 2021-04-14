@@ -71,6 +71,8 @@ def main(model_path: str, split: str = "test"):
     with gzip.open(file_path, 'rt', encoding='utf8') as fIn:
         df = pd.read_csv(fIn, delimiter='\t', quoting=csv.QUOTE_NONE)
     df = df[df.split == split].reset_index(drop=True)
+    print("# of examples:", df.shape[0])
+    # df.score = df.score / 5.
 
     encoder = load_encoder(
         model_path, None, max_length=256, do_lower_case=True, mean_pooling=True

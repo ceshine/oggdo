@@ -1,6 +1,7 @@
 import os
 import json
 import logging
+import warnings
 from typing import List, Dict, Optional
 
 import torch
@@ -9,7 +10,8 @@ import numpy as np
 from transformers import (
     BertModel, BertConfig, AutoTokenizer, AutoConfig, AutoModel, BertTokenizerFast,
     ElectraConfig, ElectraModel, ElectraTokenizerFast, DistilBertModel,
-    RobertaConfig, RobertaTokenizerFast, RobertaModel
+    RobertaConfig, RobertaTokenizerFast, RobertaModel,
+    DebertaConfig, DebertaTokenizer, DebertaModel
 )
 
 
@@ -23,8 +25,8 @@ class TransformerWrapper(nn.Module):
             self, model_name_or_path: str, max_seq_length: int = 128, do_lower_case: bool = True,
             model_type: Optional[str] = None, attentions: bool = False):
         super().__init__()
-        self.config_keys = ['max_seq_length', 'do_lower_case']
-        self.do_lower_case = do_lower_case
+        self.config_keys = ['max_seq_length']
+        # self.do_lower_case = do_lower_case
         self.attentions = attentions
 
         # TODO: maybe do this checking via the config file?
@@ -34,6 +36,10 @@ class TransformerWrapper(nn.Module):
         #     max_seq_length = 510
         self.max_seq_length = max_seq_length
 
+        warnings.warn(
+            '"do_lower_case" is deprecated. It becomes a no-op now and will be removed soon.',
+            DeprecationWarning
+        )
         config_cls = AutoConfig
         tokenizer_cls = AutoTokenizer
         model_cls = AutoModel
@@ -51,6 +57,10 @@ class TransformerWrapper(nn.Module):
                 model_cls = RobertaModel
                 config_cls = RobertaConfig
                 tokenizer_cls = RobertaTokenizerFast
+            elif model_type == "deberta":
+                model_cls = DebertaModel
+                config_cls = DebertaConfig
+                tokenizer_cls = DebertaTokenizer
             else:
                 raise ValueError(f"{model_type} is not supported!")
 
@@ -64,7 +74,7 @@ class TransformerWrapper(nn.Module):
         self.transformer = model_cls.from_pretrained(
             model_name_or_path, config=config)
         self.tokenizer = tokenizer_cls.from_pretrained(
-            model_name_or_path, do_lower_case=do_lower_case)
+            model_name_or_path)  #, do_lower_case=do_lower_case)
         self.cls_token_id = self.tokenizer.convert_tokens_to_ids(
             [self.tokenizer.cls_token])[0]
         self.sep_token_id = self.tokenizer.convert_tokens_to_ids(

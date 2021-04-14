@@ -2,20 +2,20 @@ import os
 import json
 from pathlib import Path
 from dataclasses import asdict
-from typing import Tuple, Dict, Optional
+from typing import Optional
 
 import typer
-import numpy as np
+# import numpy as np
 import torch
-import torch.nn as nn
+# import torch.nn as nn
 import pytorch_lightning as pl
 import pytorch_lightning_spells as pls
 
-from oggdo.dataset import XnliDfDataset
+from oggdo.dataset import NewsSimilarityDataset, SBertDataset
 from oggdo.components import TransformerWrapper, PoolingLayer
 from oggdo.encoder import SentenceEncoder
-from oggdo.models import SentencePairNliClassification
-from oggdo.lightning_modules import BaseConfig, NliModule, SentencePairDataModule
+from oggdo.models import SentencePairCosineSimilarity
+from oggdo.lightning_modules import CosineSimilarityConfig, SentenceEncodingModule, SBertSentencePairDataModule
 
 CACHE_DIR = Path('./cache/')
 CACHE_DIR.mkdir(exist_ok=True, parents=True)
@@ -46,59 +46,62 @@ def load_model(model_path, model_type, do_lower_case):
     encoder = SentenceEncoder(modules=[
         embedder, pooler
     ])
-    model = SentencePairNliClassification(encoder)
+    model = SentencePairCosineSimilarity(
+        encoder, linear_transform=False
+    )
     return model
 
 
 def main(
-    model_path: str = typer.Argument("pretrained_models/bert_wwm_ext/"),
+    model_path,
+    data_folder: str = "data/",
     sample_train: float = -1,
     batch_size: int = 16, grad_accu: int = 2,
-    lr: float = 3e-5, workers: int = 4, t2s: bool = False,
+    lr: float = 3e-5, workers: int = 4,
     epochs: int = 3,
     use_amp: bool = False, wd: float = 0,
-    model_type: Optional[str] = None,
-    data_path: str = "data/XNLI-1.0/train.csv",
+    lowercase: bool = True,
     layerwise_decay: float = 0,
-    lowercase: bool = False
+    model_type: Optional[str] = None
 ):
     pl.seed_everything(int(os.environ.get("SEED", 42)))
-    model = load_model(model_path, model_type, do_lower_case=lowercase)
+    model = load_model(model_path, model_type, lowercase)
 
-    config = BaseConfig(
+    config = CosineSimilarityConfig(
         model_path=model_path,
-        data_path=data_path,
+        data_path=data_folder,
         sample_train=sample_train,
         batch_size=batch_size, grad_accu=grad_accu,
         learning_rate=lr, fp16=use_amp,
-        epochs=epochs, loss_fn=nn.CrossEntropyLoss(),
-        t2s=t2s,
-        # optimizer_cls=pls.optimizers.RAdam,
-        optimizer_cls=torch.optim.AdamW,
+        epochs=epochs,
+        loss_fn=torch.nn.MSELoss(),
+        # loss_fn=torch.nn.L1Loss(),
+        t2s=False, linear_transform=False,
+        optimizer_cls=pls.optimizers.RAdam,
         weight_decay=wd,
         layerwise_decay=layerwise_decay
     )
 
-    pl_module = NliModule(
-        config, model, metrics=(("accuracy", pl.metrics.Accuracy()),),
-        layerwise_decay=config.layerwise_decay
+    pl_module = SentenceEncodingModule(
+        config, model,
+        layerwise_decay=config.layerwise_decay)
+
+    data_module = SBertSentencePairDataModule(
+        SBertDataset.STS, model.encoder[0], config,
+        dataset_cls=NewsSimilarityDataset, workers=workers,
+        name="sts"
     )
 
-    data_module = SentencePairDataModule(
-        model.encoder[0], config,
-        dataset_cls=XnliDfDataset, workers=workers,
-        name="xnli"
+    checkpoints = pl.callbacks.ModelCheckpoint(
+        dirpath=str(CACHE_DIR / "model_checkpoints"),
+        monitor='val_spearman',
+        mode="max",
+        filename='{step:06d}-{val_loss:.4f}',
+        save_top_k=1,
+        save_last=False
     )
-
     callbacks = [
-        pl.callbacks.ModelCheckpoint(
-            dirpath=str(CACHE_DIR / "model_checkpoints"),
-            monitor='val_loss',
-            mode="min",
-            filename='{step:06d}-{val_loss:.4f}',
-            save_top_k=1,
-            save_last=False
-        ),
+        checkpoints,
         pl.callbacks.LearningRateMonitor(logging_interval='step'),
     ]
 
@@ -107,7 +110,7 @@ def main(
         # amp_backend="apex", amp_level='O2',
         precision=16 if config.fp16 else 32,
         gpus=1,
-        val_check_interval=0.25,
+        # val_check_interval=0.5,
         gradient_clip_val=10,
         max_epochs=epochs,
         # max_steps=steps,
@@ -115,19 +118,21 @@ def main(
         accumulate_grad_batches=config.grad_accu,
         # auto_scale_batch_size='power' if batch_size is None else None,
         logger=[
-            pl.loggers.TensorBoardLogger(str(CACHE_DIR / "tb_logs"), name=""),
+            pl.loggers.TensorBoardLogger(str(CACHE_DIR / "tb_logs_sts"), name=""),
             pls.loggers.ScreenLogger(),
-            # pl.loggers.WandbLogger(project="news-similarity")
+            # pl.loggers.WandbLogger(project="sts")
         ],
         log_every_n_steps=100
     )
 
     trainer.fit(pl_module, datamodule=data_module)
 
-    trainer.test(datamodule=data_module)
+    pl_module.load_state_dict(torch.load(checkpoints.best_model_path)["state_dict"])
 
-    output_folder = MODEL_DIR / f"xnli_{Path(model_path).name}"
+    output_folder = MODEL_DIR / f"sts_{model.encoder[0].transformer.__class__.__name__}"
     model.save(str(output_folder))
+
+    trainer.test(datamodule=data_module)
 
     config_dict = asdict(config)
     del config_dict["loss_fn"]

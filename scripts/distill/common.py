@@ -8,6 +8,15 @@ from oggdo.components import TransformerWrapper, PoolingLayer
 
 
 def get_splits(data_folder: str = "data/", dataset: SBertDataset = SBertDataset.AllNLI):
+    """Split the dataset downloaded from sbert.net for sentence embedding distillation
+
+    Args:
+        data_folder (str, optional): Where the data lives. Defaults to "data/".
+        dataset (SBertDataset, optional): the SBert dataset. Defaults to SBertDataset.AllNLI.
+
+    Returns:
+        Iterable[List[str]]: the sentences from train, valid, and test datasets.
+    """
     data_path = download_dataset(data_folder, dataset)
     train: Set[str] = set()
     valid: Set[str] = set()
@@ -24,7 +33,6 @@ def get_splits(data_folder: str = "data/", dataset: SBertDataset = SBertDataset.
             target.add(row['sentence1'])
             target.add(row['sentence2'])
     return (list(x) for x in (train, valid, test))
-
 
 def load_encoder(
         model_path, model_type, max_length, do_lower_case,
